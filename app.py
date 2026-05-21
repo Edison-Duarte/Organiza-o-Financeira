@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 # Configuração da página para um visual limpo e moderno
 st.set_page_config(page_title="Gestão Financeira Mensal", page_icon="💰", layout="centered")
@@ -21,9 +22,10 @@ st.markdown("""
 st.title("💰 Gestão de Salário & Planejamento Mensal")
 st.write("Insira os valores recebidos e planeje o mês de forma inteligente.")
 
-st.hr()
+# CORREÇÃO: Uso do st.divider() no lugar do antigo st.hr()
+st.divider()
 
-# --- ABA 1: ENTRADAS DE DADOS ---
+# --- ENTRADAS DE DADOS ---
 st.subheader("📥 Entradas do Mês")
 
 col1, col2 = st.columns(2)
@@ -40,12 +42,17 @@ porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min
 
 # --- CÁLCULOS FINANCEIROS ---
 valor_guardar = renda_total * (porcentagem_guardar / 100)
-contas_fixas = 2200.00  # Média informada
-saldo_livre = renda_total - valor_guardar - contas_fixas
+contas_fixas = 2200.00  # Média informada por você
 
-st.hr()
+# Garante que o saldo livre não faça cálculos errados se a renda for 0
+if renda_total > 0:
+    saldo_livre = renda_total - valor_guardar - contas_fixas
+else:
+    saldo_livre = 0.0
 
-# --- ABA 2: PAINEL DE RESULTADOS ---
+st.divider()
+
+# --- PAINEL DE RESULTADOS ---
 st.subheader("📊 Resumo Financeiro")
 
 # Layout de cartões (Cards)
@@ -57,17 +64,44 @@ with c2:
 with c3:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas Média</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas:,.2f}</div></div>', unsafe_allow_html=True)
 
-# Cartão de Destaque para o Saldo Livre
-st.markdown("---")
-if saldo_livre >= 0:
-    st.success(f"### 🎉 Saldo Livre para o Mês: **R$ {saldo_livre:,.2f}**")
-    st.caption("Este é o valor disponível para mercado, lazer, gasolina, manutenção (carro, moto, ap), etc.")
-else:
-    st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
-    st.caption("A soma das contas fixas e da meta de poupança superou a sua renda este mês. Ajuste a porcentagem ou reduza custos.")
+st.markdown("")
 
-# --- ABA 3: DETALHAMENTO DE CONTAS FIXAS ---
-st.markdown("---")
+# Cartão de Destaque para o Saldo Livre (Apenas exibe se houver renda digitada)
+if renda_total > 0:
+    if saldo_livre >= 0:
+        st.success(f"### 🎉 Saldo Livre para o Mês: **R$ {saldo_livre:,.2f}**")
+        st.caption("Este é o valor disponível para mercado, lazer, gasolina, manutenção (carro, moto, ap), etc.")
+    else:
+        st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
+        st.caption("A soma das contas fixas e da meta de poupança superou a sua renda este mês. Ajuste a porcentagem ou reduza custos.")
+
+    # --- GRÁFICO DE DISTRIBUIÇÃO (Usando o Pandas que está no seu requirements) ---
+    st.markdown("#### 📈 Distribuição do seu Dinheiro")
+    
+    # Criando os dados para o gráfico (evitando valores negativos no gráfico se estourar)
+    valores_grafico = [max(0.0, valor_guardar), contas_fixas, max(0.0, saldo_livre)]
+    categorias = ["Poupança", "Contas Fixas", "Saldo Livre (Variáveis)"]
+    
+    df_grafico = pd.DataFrame({
+        "Categoria": categorias,
+        "Valor (R$)": valores_grafico
+    })
+    
+    # Exibe o gráfico nativo do Streamlit alimentado pelo Pandas
+    st. Vega_lite_chart(df_grafico, {
+        'mark': {'type': 'arc', 'innerRadius': 50},
+        'encoding': {
+            'theta': {'field': 'Valor (R$)', 'type': 'quantitative'},
+            'color': {'field': 'Categoria', 'type': 'nominal', 'scale': {'range': ['#2e7d32', '#c62828', '#1e3d59']}}
+        }
+    }, use_container_width=True)
+
+else:
+    st.info("💡 Insira os valores de Adiantamento e Pagamento acima para gerar o seu diagnóstico financeiro.")
+
+st.divider()
+
+# --- DETALHAMENTO DE CONTAS FIXAS ---
 with st.expander("📌 Ver lista de contas fixas inclusas no cálculo (R$ 2.200,00)"):
     st.write("Abaixo estão as contas cobertas pelo seu teto fixo mensal:")
     st.markdown("""
