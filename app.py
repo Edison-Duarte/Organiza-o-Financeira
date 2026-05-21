@@ -32,7 +32,6 @@ def carregar_dados():
         try:
             with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
                 dados_salvos = json.load(f)
-                # Garante que chaves novas/faltantes não quebrem o app se o arquivo for antigo
                 for chave, valor in valores_padrao.items():
                     dados_salvos.setdefault(chave, valor)
                 return dados_salvos
@@ -165,8 +164,12 @@ if renda_total > 0:
     
     col_d20, col_d05 = st.columns(2)
     with col_d20:
+        # Cálculo de impacto no orçamento total do mês
+        p_reter_do_total = (total_reter_dia20 / renda_total) * 100 if renda_total > 0 else 0
+        
         st.info(f"### 🏦 Dia 20 (Adiantamento)\n"
-                f"Você deve reter **{porcentagem_reter_dia20:.1f}%** deste valor.\n\n"
+                f"Você deve reter **{porcentagem_reter_dia20:.1f}%** deste adiantamento.\n\n"
+                f"💡 *Isso equivale a **{p_reter_do_total:.1f}%** do seu salário total do mês.*\n\n"
                 f"*   **Poupar (Meta):** R$ {poupança_dia20:,.2f}\n"
                 f"*   **Reservar para Contas:** R$ {fixas_dia20:,.2f}\n"
                 f"**Total a reter/guardar:** R$ {total_reter_dia20:,.2f}")
