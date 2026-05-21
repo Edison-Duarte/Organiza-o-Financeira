@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("💰 Gestão de Salário & Planejamento Mensal")
-st.write("Insira seus recebimentos, gerencie suas contas e planeje suas compras do mês.")
+st.write("Insira seus recebimentos, gerencie suas contas fixas e estime seus gastos variáveis.")
 
 st.divider()
 
@@ -41,24 +41,27 @@ porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min
 
 st.divider()
 
-# --- SEÇÃO 2: COMPRAS DO MÊS (NOVA FUNCIONALIDADE) ---
-st.subheader("🛒 Projeção de Compras do Mês")
-st.write("Estimativa de supermercado, açougue, higiene e limpeza para quem mora sozinho:")
+# --- SEÇÃO 2: GASTOS VARIÁVEIS (MERCADO E COMBUSTÍVEL) ---
+st.subheader("🚗 Gastos Variáveis do Mês")
+st.write("Ajuste a previsão de despesas maleáveis para este mês:")
 
-compras_mes = st.number_input(
-    "Previsão de Supermercado/Alimentação - R$", 
-    min_value=0.0, 
-    value=750.00, 
-    step=50.0, 
-    format="%.2f",
-    help="Média recomendada para um perfil individual equilibrado."
-)
+gv_col1, gv_col2 = st.columns(2)
+
+with gv_col1:
+    compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=750.00, step=50.0, format="%.2f")
+    combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=250.00, step=50.0, format="%.2f")
+
+with gv_col2:
+    combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=120.00, step=20.0, format="%.2f")
+
+# Soma dinâmica de todas as variáveis informadas
+gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
 
 st.divider()
 
 # --- SEÇÃO 3: DETALHAMENTO DE CONTAS FIXAS ---
 st.subheader("📌 Detalhamento das Contas Fixas")
-st.write("Ajuste os valores reais de cada conta de moradia e consumo:")
+st.write("Ajuste os valores reais de cada boleto de moradia e consumo:")
 
 cf_col1, cf_col2 = st.columns(2)
 
@@ -81,16 +84,16 @@ st.divider()
 # --- CÁLCULOS FINANCEIROS ---
 valor_guardar = renda_total * (porcentagem_guardar / 100)
 
-# O saldo livre agora tira as contas fixas E o mercado
+# O saldo livre agora deduz tanto o bloco de fixas quanto o bloco de variáveis editáveis
 if renda_total > 0:
-    saldo_livre = renda_total - valor_guardar - contas_fixas_total - compras_mes
+    saldo_livre = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total
 else:
     saldo_livre = 0.0
 
 # --- SEÇÃO 4: PAINEL DE RESULTADOS ---
 st.subheader("📊 Resumo Financeiro")
 
-# Layout de cartões (Cards) para os principais destinos
+# Layout de cartões (Cards) atualizado com as novas divisões de custos
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
@@ -99,34 +102,34 @@ with c2:
 with c3:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
 with c4:
-    st.markdown(f'<div class="metric-box"><div class="metric-title">Mercado/Compras</div><div class="metric-value" style="color: #f57c00;">R$ {compras_mes:,.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis Previstas</div><div class="metric-value" style="color: #f57c00;">R$ {gastos_variaveis_total:,.2f}</div></div>', unsafe_allow_html=True)
 
 st.markdown("")
 
-# Cartão de Destaque para o Saldo Livre Real
+# Cartão de Destaque para o Saldo de Sobra Real
 if renda_total > 0:
     if saldo_livre >= 0:
-        st.success(f"### 🎉 Saldo Livre Restante: **R$ {saldo_livre:,.2f}**")
-        st.caption("Dinheiro limpo e disponível para gastar com lazer, gasolina, manutenção do carro/moto ou imprevistos do apartamento.")
+        st.success(f"### 🎉 Saldo Livre para Lazer: **R$ {saldo_livre:,.2f}**")
+        st.caption("Valor completamente livre para saídas, jantares, hobbies ou para guardar de reserva extra para manutenções.")
     else:
         st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
-        st.caption("A soma das contas fixas, mercado e investimento superou seus ganhos. Reduza a meta de poupança ou controle os custos.")
+        st.caption("A soma de fixas, variáveis e poupança superou seus ganhos. Diminue temporariamente a barra de poupança ou reajuste as previsões.")
 
     # --- TABELA DE DISTRIBUIÇÃO ---
-    st.markdown("#### 📋 Onde cada parte do seu salário está indo")
+    st.markdown("#### 📋 Distribuição Geral do Orçamento")
     
     p_poupança = (valor_guardar / renda_total) * 100
     p_fixas = (contas_fixas_total / renda_total) * 100
-    p_compras = (compras_mes / renda_total) * 100
+    p_variaveis = (gastos_variaveis_total / renda_total) * 100
     p_livre = (max(0.0, saldo_livre) / renda_total) * 100
 
     df_distribuicao = pd.DataFrame({
-        "Destino do Dinheiro": ["Poupança (Reservas)", "Contas Fixas (Moradia/Consumo)", "Compras Essenciais (Mercado)", "Saldo Livre (Estilo de Vida)"],
-        "Valor Total (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {compras_mes:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
-        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_compras:.1f}%", f"{p_livre:.1f}%"]
+        "Destino do Dinheiro": ["Poupança (Investimentos)", "Contas Fixas (Moradia/Consumo)", "Gastos Variáveis (Mercado/Combustíveis)", "Saldo Livre (Lazer/Hobbies)"],
+        "Valor Total (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {gastos_variaveis_total:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
+        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_variaveis:.1f}%", f"{p_livre:.1f}%"]
     })
     
     st.dataframe(df_distribuicao, hide_index=True, use_container_width=True)
 
 else:
-    st.info("💡 Digite seus salários no início da página para calcular o balanço geral do mês.")
+    st.info("💡 Insira os valores de Adiantamento e Pagamento no topo para recalcular todo o ecossistema financeiro.")
