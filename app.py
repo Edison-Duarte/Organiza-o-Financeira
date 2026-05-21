@@ -22,7 +22,6 @@ st.markdown("""
 st.title("💰 Gestão de Salário & Planejamento Mensal")
 st.write("Insira os valores recebidos e planeje o mês de forma inteligente.")
 
-# CORREÇÃO: Uso do st.divider() no lugar do antigo st.hr()
 st.divider()
 
 # --- ENTRADAS DE DADOS ---
@@ -75,26 +74,22 @@ if renda_total > 0:
         st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
         st.caption("A soma das contas fixas e da meta de poupança superou a sua renda este mês. Ajuste a porcentagem ou reduza custos.")
 
-    # --- GRÁFICO DE DISTRIBUIÇÃO (Usando o Pandas que está no seu requirements) ---
-    st.markdown("#### 📈 Distribuição do seu Dinheiro")
+    # --- TABELA DE DISTRIBUIÇÃO ---
+    st.markdown("#### 📋 Divisão Percentual do Orçamento")
     
-    # Criando os dados para o gráfico (evitando valores negativos no gráfico se estourar)
-    valores_grafico = [max(0.0, valor_guardar), contas_fixas, max(0.0, saldo_livre)]
-    categorias = ["Poupança", "Contas Fixas", "Saldo Livre (Variáveis)"]
-    
-    df_grafico = pd.DataFrame({
-        "Categoria": categorias,
-        "Valor (R$)": valores_grafico
+    # Criando um DataFrame limpo usando o Pandas do seu requirements
+    p_poupança = (valor_guardar / renda_total) * 100
+    p_fixas = (contas_fixas / renda_total) * 100
+    p_livre = (max(0.0, saldo_livre) / renda_total) * 100
+
+    df_distribuicao = pd.DataFrame({
+        "Destino do Dinheiro": ["Poupança (Meta)", "Contas Fixas Proporcionais", "Saldo Livre (Variáveis)"],
+        "Valor (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
+        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_livre:.1f}%"]
     })
     
-    # Exibe o gráfico nativo do Streamlit alimentado pelo Pandas
-    st. Vega_lite_chart(df_grafico, {
-        'mark': {'type': 'arc', 'innerRadius': 50},
-        'encoding': {
-            'theta': {'field': 'Valor (R$)', 'type': 'quantitative'},
-            'color': {'field': 'Categoria', 'type': 'nominal', 'scale': {'range': ['#2e7d32', '#c62828', '#1e3d59']}}
-        }
-    }, use_container_width=True)
+    # Exibe uma tabela nativa e elegante do Streamlit
+    st.dataframe(df_distribuicao, hide_index=True, use_container_width=True)
 
 else:
     st.info("💡 Insira os valores de Adiantamento e Pagamento acima para gerar o seu diagnóstico financeiro.")
