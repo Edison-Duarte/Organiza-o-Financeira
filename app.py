@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("💰 Gestão de Salário & Planejamento Mensal")
-st.write("Insira seus recebimentos e detalhe suas contas para organizar o mês.")
+st.write("Insira seus recebimentos, gerencie suas contas e planeje suas compras do mês.")
 
 st.divider()
 
@@ -41,11 +41,25 @@ porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min
 
 st.divider()
 
-# --- SEÇÃO 2: DETALHAMENTO DE CONTAS FIXAS ---
-st.subheader("📌 Detalhamento das Contas Fixas")
-st.write("Ajuste os valores reais de cada conta para este mês:")
+# --- SEÇÃO 2: COMPRAS DO MÊS (NOVA FUNCIONALIDADE) ---
+st.subheader("🛒 Projeção de Compras do Mês")
+st.write("Estimativa de supermercado, açougue, higiene e limpeza para quem mora sozinho:")
 
-# Organizando as contas fixas em colunas para não ocupar muito espaço vertical
+compras_mes = st.number_input(
+    "Previsão de Supermercado/Alimentação - R$", 
+    min_value=0.0, 
+    value=750.00, 
+    step=50.0, 
+    format="%.2f",
+    help="Média recomendada para um perfil individual equilibrado."
+)
+
+st.divider()
+
+# --- SEÇÃO 3: DETALHAMENTO DE CONTAS FIXAS ---
+st.subheader("📌 Detalhamento das Contas Fixas")
+st.write("Ajuste os valores reais de cada conta de moradia e consumo:")
+
 cf_col1, cf_col2 = st.columns(2)
 
 with cf_col1:
@@ -59,7 +73,7 @@ with cf_col2:
     luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=80.00, step=10.0, format="%.2f")
     celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=40.00, step=5.0, format="%.2f")
 
-# Soma dinâmica de todas as contas fixas inseridas pelo usuário
+# Soma dinâmica de todas as contas fixas
 contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + claro_tv_internet + luz + celular
 
 st.divider()
@@ -67,49 +81,52 @@ st.divider()
 # --- CÁLCULOS FINANCEIROS ---
 valor_guardar = renda_total * (porcentagem_guardar / 100)
 
-# Garante que o saldo livre faça cálculos corretdos se houver renda
+# O saldo livre agora tira as contas fixas E o mercado
 if renda_total > 0:
-    saldo_livre = renda_total - valor_guardar - contas_fixas_total
+    saldo_livre = renda_total - valor_guardar - contas_fixas_total - compras_mes
 else:
     saldo_livre = 0.0
 
-# --- SEÇÃO 3: PAINEL DE RESULTADOS ---
+# --- SEÇÃO 4: PAINEL DE RESULTADOS ---
 st.subheader("📊 Resumo Financeiro")
 
-# Layout de cartões (Cards)
-c1, c2, c3 = st.columns(3)
+# Layout de cartões (Cards) para os principais destinos
+c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
 with c2:
-    st.markdown(f'<div class="metric-box"><div class="metric-title">Meta de Poupança ({porcentagem_guardar}%)</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Poupança</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
 with c3:
-    st.markdown(f'<div class="metric-box"><div class="metric-title">Total Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
+with c4:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Mercado/Compras</div><div class="metric-value" style="color: #f57c00;">R$ {compras_mes:,.2f}</div></div>', unsafe_allow_html=True)
 
 st.markdown("")
 
-# Cartão de Destaque para o Saldo Livre (Apenas exibe se houver renda digitada)
+# Cartão de Destaque para o Saldo Livre Real
 if renda_total > 0:
     if saldo_livre >= 0:
-        st.success(f"### 🎉 Saldo Livre para o Mês: **R$ {saldo_livre:,.2f}**")
-        st.caption("Este é o valor disponível para mercado, lazer, gasolina, manutenção do carro/moto, despesas do apartamento, etc.")
+        st.success(f"### 🎉 Saldo Livre Restante: **R$ {saldo_livre:,.2f}**")
+        st.caption("Dinheiro limpo e disponível para gastar com lazer, gasolina, manutenção do carro/moto ou imprevistos do apartamento.")
     else:
         st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
-        st.caption("A soma das contas fixas e da meta de poupança superou a sua renda este mês. Reduza os valores ou mude a porcentagem de poupança.")
+        st.caption("A soma das contas fixas, mercado e investimento superou seus ganhos. Reduza a meta de poupança ou controle os custos.")
 
     # --- TABELA DE DISTRIBUIÇÃO ---
-    st.markdown("#### 📋 Visão Geral do Destino do Salário")
+    st.markdown("#### 📋 Onde cada parte do seu salário está indo")
     
     p_poupança = (valor_guardar / renda_total) * 100
     p_fixas = (contas_fixas_total / renda_total) * 100
+    p_compras = (compras_mes / renda_total) * 100
     p_livre = (max(0.0, saldo_livre) / renda_total) * 100
 
     df_distribuicao = pd.DataFrame({
-        "Destino do Dinheiro": ["Poupança (Reservas)", "Contas Fixas Somadas", "Saldo Livre (Variáveis/Estilo de Vida)"],
-        "Valor Total (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
-        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_livre:.1f}%"]
+        "Destino do Dinheiro": ["Poupança (Reservas)", "Contas Fixas (Moradia/Consumo)", "Compras Essenciais (Mercado)", "Saldo Livre (Estilo de Vida)"],
+        "Valor Total (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {compras_mes:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
+        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_compras:.1f}%", f"{p_livre:.1f}%"]
     })
     
     st.dataframe(df_distribuicao, hide_index=True, use_container_width=True)
 
 else:
-    st.info("💡 Insira os valores de Adiantamento e Pagamento no topo da página para calcular o seu Saldo Livre.")
+    st.info("💡 Digite seus salários no início da página para calcular o balanço geral do mês.")
