@@ -29,10 +29,10 @@ st.subheader("📥 Recebimentos do Mês")
 
 col1, col2 = st.columns(2)
 with col1:
-    # Preenchido com o seu adiantamento real anterior
+    # PREENCHIDO: Seu adiantamento real
     adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=2082.22, step=100.0, format="%.2f")
 with col2:
-    # Preenchido com o seu pagamento oficial real anterior
+    # PREENCHIDO: Seu pagamento oficial real
     salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=3152.25, step=100.0, format="%.2f")
 
 # Cálculo da renda total
@@ -50,13 +50,16 @@ st.write("Ajuste a previsão de despesas maleáveis para este mês:")
 gv_col1, gv_col2 = st.columns(2)
 
 with gv_col1:
+    # PREENCHIDO: Projeção de mercado para morar sozinho
     compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=750.00, step=50.0, format="%.2f")
+    # PREENCHIDO: Combustível do Carro
     combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=250.00, step=50.0, format="%.2f")
 
 with gv_col2:
+    # PREENCHIDO: Combustível da Moto
     combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=120.00, step=20.0, format="%.2f")
 
-# Soma dinâmica de todas as variáveis informadas
+# Soma dinâmica de todas as variáveis informadas (Total inicial: R$ 1.120,00)
 gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
 
 st.divider()
@@ -68,12 +71,14 @@ st.write("Ajuste os valores reais de cada boleto de moradia e consumo:")
 cf_col1, cf_col2 = st.columns(2)
 
 with cf_col1:
+    # PREENCHIDO: Valores reais aproximados detalhados de moradia
     financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=1400.00, step=50.0, format="%.2f")
     condominio = st.number_input("Condomínio - R$", min_value=0.0, value=400.00, step=20.0, format="%.2f")
     iptu = st.number_input("IPTU - R$", min_value=0.0, value=100.00, step=10.0, format="%.2f")
     seguro_residencial = st.number_input("Seguro Residencial - R$", min_value=0.0, value=30.00, step=5.0, format="%.2f")
 
 with cf_col2:
+    # PREENCHIDO: Valores reais aproximados de serviços de utilidade/consumo
     claro_tv_internet = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=150.00, step=10.0, format="%.2f")
     luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=80.00, step=10.0, format="%.2f")
     celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=40.00, step=5.0, format="%.2f")
