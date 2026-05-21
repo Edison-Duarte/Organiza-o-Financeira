@@ -20,7 +20,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("💰 Gestão de Salário & Planejamento Mensal")
-st.write("Insira seus recebimentos, gerencie suas contas fixas e estime seus gastos variáveis.")
+st.write("Seus dados do mês anterior estão salvos abaixo como padrão. Atualize-os conforme necessário.")
 
 st.divider()
 
@@ -29,14 +29,16 @@ st.subheader("📥 Recebimentos do Mês")
 
 col1, col2 = st.columns(2)
 with col1:
-    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=0.0, step=100.0, format="%.2f")
+    # Preenchido com o seu adiantamento real anterior
+    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=2082.22, step=100.0, format="%.2f")
 with col2:
-    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=0.0, step=100.0, format="%.2f")
+    # Preenchido com o seu pagamento oficial real anterior
+    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=3152.25, step=100.0, format="%.2f")
 
 # Cálculo da renda total
 renda_total = adiantamento + salario_oficial
 
-# Seletor da porcentagem para guardar
+# Seletor da porcentagem para guardar (Inicia em 10% conforme seu uso atual)
 porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=10, step=5)
 
 st.divider()
@@ -76,7 +78,7 @@ with cf_col2:
     luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=80.00, step=10.0, format="%.2f")
     celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=40.00, step=5.0, format="%.2f")
 
-# Soma dinâmica de todas as contas fixas
+# Soma dinâmica de todas as contas fixas (Total padrão de R$ 2.200,00)
 contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + claro_tv_internet + luz + celular
 
 st.divider()
@@ -88,7 +90,7 @@ valor_guardar = renda_total * (porcentagem_guardar / 100)
 if renda_total > 0:
     saldo_livre = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total
     
-    # Cálculos de Proporção para a sua necessidade de carimbo de saldo
+    # Cálculos de Proporção para retenção por quinzena
     p_adiantamento = adiantamento / renda_total
     p_oficial = salario_oficial / renda_total
     
@@ -129,7 +131,7 @@ if renda_total > 0:
     else:
         st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
 
-    # --- NOVA SEÇÃO INTERATIVA: PROGRAMAÇÃO DE RETENÇÃO POR DATA ---
+    # --- PROGRAMAÇÃO DE RETENÇÃO POR DATA ---
     st.divider()
     st.subheader("📅 O que fazer quando o dinheiro cair?")
     
