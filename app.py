@@ -84,21 +84,38 @@ st.divider()
 # --- CÁLCULOS FINANCEIROS ---
 valor_guardar = renda_total * (porcentagem_guardar / 100)
 
-# O saldo livre agora deduz tanto o bloco de fixas quanto o bloco de variáveis editáveis
+# O saldo livre deduz as fixas e as variáveis
 if renda_total > 0:
     saldo_livre = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total
+    
+    # Cálculos de Proporção para a sua necessidade de carimbo de saldo
+    p_adiantamento = adiantamento / renda_total
+    p_oficial = salario_oficial / renda_total
+    
+    # Provisão proporcional do Adiantamento (Dia 20)
+    poupança_dia20 = adiantamento * (porcentagem_guardar / 100)
+    fixas_dia20 = contas_fixas_total * p_adiantamento
+    total_reter_dia20 = poupança_dia20 + fixas_dia20
+    porcentagem_reter_dia20 = (total_reter_dia20 / adiantamento) * 100 if adiantamento > 0 else 0
+    
+    # Provisão proporcional do Pagamento Oficial (Dia 05)
+    poupança_dia05 = salario_oficial * (porcentagem_guardar / 100)
+    fixas_dia05 = contas_fixas_total * p_oficial
 else:
     saldo_livre = 0.0
+    porcentagem_reter_dia20 = 0.0
+    total_reter_dia20 = 0.0
+    poupança_dia20 = 0.0
+    fixas_dia20 = 0.0
 
 # --- SEÇÃO 4: PAINEL DE RESULTADOS ---
 st.subheader("📊 Resumo Financeiro")
 
-# Layout de cartões (Cards) atualizado com as novas divisões de custos
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
 with c2:
-    st.markdown(f'<div class="metric-box"><div class="metric-title">Poupança</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Poupança Total</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
 with c3:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
 with c4:
@@ -106,14 +123,31 @@ with c4:
 
 st.markdown("")
 
-# Cartão de Destaque para o Saldo de Sobra Real
 if renda_total > 0:
     if saldo_livre >= 0:
         st.success(f"### 🎉 Saldo Livre para Lazer: **R$ {saldo_livre:,.2f}**")
-        st.caption("Valor completamente livre para saídas, jantares, hobbies ou para guardar de reserva extra para manutenções.")
     else:
         st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
-        st.caption("A soma de fixas, variáveis e poupança superou seus ganhos. Diminue temporariamente a barra de poupança ou reajuste as previsões.")
+
+    # --- NOVA SEÇÃO INTERATIVA: PROGRAMAÇÃO DE RETENÇÃO POR DATA ---
+    st.divider()
+    st.subheader("📅 O que fazer quando o dinheiro cair?")
+    
+    col_d20, col_d05 = st.columns(2)
+    
+    with col_d20:
+        st.info(f"### 🏦 Dia 20 (Adiantamento)\n"
+                f"Você deve reter **{porcentagem_reter_dia20:.1f}%** deste valor.\n\n"
+                f"*   **Poupar (Meta):** R$ {poupança_dia20:,.2f}\n"
+                f"*   **Reservar para Contas:** R$ {fixas_dia20:,.2f}\n"
+                f"**Total a reter/guardar:** R$ {total_reter_dia20:,.2f}")
+                
+    with col_d05:
+        st.info(f"### 🏢 Dia 05 (Pagamento Oficial)\n"
+                f"Retenha o restante proporcional para quitar o mês.\n\n"
+                f"*   **Poupar (Meta):** R$ {poupança_dia05:,.2f}\n"
+                f"*   **Separar para Contas:** R$ {fixas_dia05:,.2f}\n"
+                f"**Junte com a reserva do dia 20 para pagar os boletos.**")
 
     # --- TABELA DE DISTRIBUIÇÃO ---
     st.markdown("#### 📋 Distribuição Geral do Orçamento")
@@ -130,6 +164,5 @@ if renda_total > 0:
     })
     
     st.dataframe(df_distribuicao, hide_index=True, use_container_width=True)
-
 else:
     st.info("💡 Insira os valores de Adiantamento e Pagamento no topo para recalcular todo o ecossistema financeiro.")
