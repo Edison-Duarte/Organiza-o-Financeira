@@ -124,19 +124,32 @@ if renda_total > 0:
     p_adiantamento = adiantamento / renda_total
     p_oficial = salario_oficial / renda_total
     
+    # Proporções e Totais do Adiantamento (Dia 20)
     poupança_dia20 = adiantamento * (porcentagem_guardar / 100)
     fixas_dia20 = contas_fixas_total * p_adiantamento
     total_reter_dia20 = poupança_dia20 + fixas_dia20
     porcentagem_reter_dia20 = (total_reter_dia20 / adiantamento) * 100 if adiantamento > 0 else 0
+    p_reter_d20_do_total = (total_reter_dia20 / renda_total) * 100
     
+    # Proporções e Totais do Pagamento Oficial (Dia 05)
     poupança_dia05 = salario_oficial * (porcentagem_guardar / 100)
     fixas_dia05 = contas_fixas_total * p_oficial
+    total_reter_dia05 = poupança_dia05 + fixas_dia05
+    porcentagem_reter_dia05 = (total_reter_dia05 / salario_oficial) * 100 if salario_oficial > 0 else 0
+    p_reter_d05_do_total = (total_reter_dia05 / renda_total) * 100
 else:
     saldo_livre = 0.0
     porcentagem_reter_dia20 = 0.0
     total_reter_dia20 = 0.0
+    p_reter_d20_do_total = 0.0
     poupança_dia20 = 0.0
     fixas_dia20 = 0.0
+    
+    porcentagem_reter_dia05 = 0.0
+    total_reter_dia05 = 0.0
+    p_reter_d05_do_total = 0.0
+    poupança_dia05 = 0.0
+    fixas_dia05 = 0.0
 
 # --- SEÇÃO 4: PAINEL DE RESULTADOS ---
 st.subheader("📊 Resumo Financeiro")
@@ -164,22 +177,21 @@ if renda_total > 0:
     
     col_d20, col_d05 = st.columns(2)
     with col_d20:
-        # Cálculo de impacto no orçamento total do mês
-        p_reter_do_total = (total_reter_dia20 / renda_total) * 100 if renda_total > 0 else 0
-        
         st.info(f"### 🏦 Dia 20 (Adiantamento)\n"
                 f"Você deve reter **{porcentagem_reter_dia20:.1f}%** deste adiantamento.\n\n"
-                f"💡 *Isso equivale a **{p_reter_do_total:.1f}%** do seu salário total do mês.*\n\n"
+                f"💡 *Isso equivale a **{p_reter_d20_do_total:.1f}%** do seu salário total.*\n\n"
                 f"*   **Poupar (Meta):** R$ {poupança_dia20:,.2f}\n"
                 f"*   **Reservar para Contas:** R$ {fixas_dia20:,.2f}\n"
                 f"**Total a reter/guardar:** R$ {total_reter_dia20:,.2f}")
                 
     with col_d05:
         st.info(f"### 🏢 Dia 05 (Pagamento Oficial)\n"
-                f"Retenha o restante proporcional para quitar o mês.\n\n"
+                f"Você deve reter **{porcentagem_reter_dia05:.1f}%** deste pagamento.\n\n"
+                f"💡 *Isso equivale a **{p_reter_d05_do_total:.1f}%** do seu salário total.*\n\n"
                 f"*   **Poupar (Meta):** R$ {poupança_dia05:,.2f}\n"
                 f"*   **Separar para Contas:** R$ {fixas_dia05:,.2f}\n"
-                f"**Junte com a reserva do dia 20 para pagar os boletos.**")
+                f"**Total a reter/guardar:** R$ {total_reter_dia05:,.2f}\n\n"
+                f"📌 *Junte com a reserva do dia 20 para pagar os boletos.*")
 
     st.markdown("#### 📋 Distribuição Geral do Orçamento")
     
