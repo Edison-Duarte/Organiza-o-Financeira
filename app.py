@@ -131,7 +131,7 @@ with tab1:
                             })
                         
                         try:
-                            # Tenta ler os dados limpando colunas fantasmas antes de atualizar
+                            # Tenta ler os dados e limpa as colunas geradas automaticamente por indexações antigas
                             df_atual = conn.read(ttl=0)
                             df_atual = df_atual.loc[:, ~df_atual.columns.str.contains('^Unnamed')]
                             
@@ -142,13 +142,13 @@ with tab1:
                             st.rerun()
                             
                         except Exception as ex:
-                            # MODIFICAÇÃO DE SEGURANÇA: Bloqueia o reset automático para expor o erro real na tela
+                            # Caso o erro retornado seja falso positivo (código HTTP 200 encapsulado como string)
                             if "200" in str(ex): 
                                 st.session_state.sucesso = True
                                 st.rerun()
                             else: 
                                 st.error("❌ Erro técnico ao gravar na Planilha Google:")
-                                st.info("Verifique se as permissões nas Secrets estão corretas ou se a aba da tabela foi alterada.")
+                                st.info("Se o erro persistir, certifique-se de que o e-mail da Conta de Serviço está adicionado como 'Editor' na partilha direta da sua planilha.")
                                 st.exception(ex)
 
 # --- ABA 2: HISTÓRICO ---
