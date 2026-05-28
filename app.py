@@ -2,15 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Configuração da página - DEVE SER A PRIMEIRA LINHA DO STREAMLIT
+# Configuração da página (Deve ser a primeira linha)
 st.set_page_config(page_title="Gestão Financeira + Extrato", page_icon="💰", layout="centered")
-
-# Importação segura do conector para evitar que o app quebre na inicialização
-try:
-    from streamlit_gsheets import GSheetsConnection
-    CONECTOR_DISPONIVEL = True
-except ImportError:
-    CONECTOR_DISPONIVEL = False
 
 # Estilização de métricas
 st.markdown("""
@@ -29,23 +22,24 @@ st.markdown("""
 
 st.title("💰 Gestão Financeira com Histórico Real")
 
-# --- TENTATIVA DE CONEXÃO SEGURA ---
-df_gastos_reais = pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
-conexao_ok = False
+# --- CONEXÃO DIRETA E SEGURA VIA PANDAS ---
+# Usando o ID da sua planilha diretamente para puxar os dados de forma limpa
+SHEET_ID = "1X74m1kSZIx_eLdGTb8ZOf4RNK-PrFWFlmdx4gtgig9Q"
+URL_PANDAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Gastos"
 
-if CONECTOR_DISPONIVEL:
-    try:
-        # Tenta conectar usando as secrets do Streamlit
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df_gastos_reais = conn.read(worksheet="Gastos", ttl="0m")
-        conexao_ok = True
-    except Exception as e:
-        st.warning("⚠️ O aplicativo abriu, mas não conseguiu ler a Planilha do Google.")
-        st.info("Verifique se você colou as 'Secrets' corretamente no painel do Streamlit Cloud ou se o nome da aba é 'Gastos'.")
-        with st.expander("Clique para ver o detalhe técnico do erro da planilha"):
-            st.code(str(e))
-else:
-    st.error("Erro crítico: A biblioteca de conexão gsheets não foi instalada corretamente.")
+try:
+    df_gastos_reais = pd.read_csv(URL_PANDAS)
+    # Remove colunas totalmente vazias caso existam
+    df_gastos_reais = df_gastos_reais.dropna(how="all", axis=1)
+    # Garante que os cabeçalhos mínimos existam
+    for col in ["Data", "Descricao", "Categoria", "Valor"]:
+        if col not in df_gastos_reais.columns:
+            df_gastos_reais[col] = None
+    conexao_ok = True
+except Exception as e:
+    st.error("Não foi possível ler os dados da planilha via link. Verifique a internet.")
+    df_gastos_reais = pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
+    conexao_ok = False
 
 # --- SEÇÃO 1: ENTRADAS DE RENDA FIXA ---
 st.subheader("📥 Recebimentos Base")
@@ -64,45 +58,56 @@ st.divider()
 # --- SEÇÃO 2: NOVO LANÇAMENTO DE GASTO REAL ---
 st.subheader("💸 Lançar Novo Gasto")
 
-if conexao_ok:
-    with st.form(key="novo_gasto_form", clear_on_submit=True):
-        col_data, col_desc = st.columns([1, 2])
-        with col_data:
-            data_gasto = st.date_input("Data", datetime.now())
-        with col_desc:
-            descricao_gasto = st.text_input("Descrição (Ex: Bar do Fulano)")
-            
-        col_cat, col_val = st.columns(2)
-        with col_cat:
-            categoria_gasto = st.selectbox("Categoria", ["Mercado", "Saídas/Lazer", "Passeios/Viagens", "Combustível Carro", "Combustível Moto", "Contas Fixas", "Outros"])
-        with col_val:
-            valor_lancado = st.number_input("Valor Pago - R$", min_value=0.01, step=5.0, format="%.2f")
-            
-        botao_salvar = st.form_submit_button("Gravar Gasto na Planilha", type="primary", use_container_width=True)
+with st.form(key="novo_gasto_form", clear_on_submit=True):
+    col_data, col_desc = st.columns([1, 2])
+    with col_data:
+        data_gasto = st.date_input("Data", datetime.now())
+    with col_desc:
+        descricao_gasto = st.text_input("Descrição (Ex: Bar do Fulano)")
+        
+    col_cat, col_val = st.columns(2)
+    with col_cat:
+        categoria_gasto = st.selectbox("Categoria", ["Mercado", "Saídas/Lazer", "Passeios/Viagens", "Combustível Carro", "Combustível Moto", "Contas Fixas", "Outros"])
+    with col_val:
+        valor_lancado = st.number_input("Valor Pago - R$", min_value=0.01, step=5.0, format="%.2f")
+        
+    botao_salvar = st.form_submit_button("Gravar Gasto na Planilha", type="primary", use_container_width=True)
 
-        if botao_salvar:
-            if descricao_gasto == "":
-                st.warning("Por favor, digite uma descrição para o gasto.")
-            else:
+    if botao_salvar:
+        if descricao_gasto == "":
+            st.warning("Por favor, digite uma descrição para o gasto.")
+        else:
+            try:
+                # Usando a conexão do gsheets apenas para INSERIR o dado novo com segurança
+                from streamlit_gsheets import GSheetsConnection
+                conn = st.connection("gsheets", type=GSheetsConnection)
+                
+                # Lê o estado bruto atual via conector para fazer o append
+                df_existente = conn.read(worksheet="Gastos", ttl="0m")
+                
                 novo_dado = pd.DataFrame([{
                     "Data": data_gasto.strftime("%Y-%m-%d"),
                     "Descricao": descricao_gasto,
                     "Categoria": categoria_gasto,
                     "Valor": float(valor_lancado)
                 }])
-                df_atualizado = pd.concat([df_gastos_reais, novo_dado], ignore_index=True)
+                
+                df_atualizado = pd.concat([df_existente, novo_dado], ignore_index=True)
                 conn.update(worksheet="Gastos", data=df_atualizado)
                 st.success(f"🎉 '{descricao_gasto}' gravado com sucesso!")
                 st.rerun()
-else:
-    st.error("Formulário de lançamento bloqueado: reconecte sua planilha nas Secrets para ativar.")
+            except Exception as e:
+                st.error(f"Erro ao salvar na planilha: {e}")
 
 st.divider()
 
 # --- SEÇÃO 3: ANÁLISE REAL DOS GASTOS ---
 st.subheader("📊 Gráficos e Distribuição dos Gastos Reais")
 
-if conexao_ok and not df_gastos_reais.empty and len(df_gastos_reais) > 0:
+# Limpa linhas vazias para evitar problemas nos cálculos
+df_gastos_reais = df_gastos_reais.dropna(subset=["Valor"])
+
+if not df_gastos_reais.empty and len(df_gastos_reais) > 0:
     df_gastos_reais["Valor"] = pd.to_numeric(df_gastos_reais["Valor"])
     df_agrupado = df_gastos_reais.groupby("Categoria")["Valor"].sum().reset_index()
     total_gasto_real = df_agrupado["Valor"].sum()
@@ -123,7 +128,7 @@ if conexao_ok and not df_gastos_reais.empty and len(df_gastos_reais) > 0:
 else:
     total_gasto_real = 0.0
     saldo_livre_real = renda_total - valor_guardar
-    st.info("💡 Nenhuma despesa real para listar no momento.")
+    st.info("💡 Nenhuma despesa real cadastrada. Use o formulário acima para realizar o primeiro lançamento!")
 
 st.divider()
 
@@ -145,7 +150,7 @@ if renda_total > 0:
     else:
         st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre_real):,.2f}**")
 
-    if conexao_ok and not df_gastos_reais.empty:
+    if not df_gastos_reais.empty and len(df_gastos_reais) > 0:
         st.markdown("#### 📜 Extrato Detalhado do Mês")
         df_extrato = df_gastos_reais.sort_values(by="Data", ascending=False).copy()
         df_extrato["Valor"] = df_extrato["Valor"].map("R$ {:,.2f}".format)
