@@ -108,36 +108,24 @@ st.subheader("📅 O que fazer quando o dinheiro cair?")
 # Distribuição matemática baseada nas proporções exatas de peso de cada ganho
 proporcao_adiantamento = adiantamento / renda_total if renda_total > 0 else 0
 proporcao_salario = salario_oficial / renda_total if renda_total > 0 else 0
-if botao_salvar:
-        if descricao_gasto == "":
-            st.warning("Insira uma descrição para salvar.")
-        else:
-            with st.spinner("Gravando dados na planilha..."):
-                try:
-                    from streamlit_gsheets import GSheetsConnection
-                    conn = st.connection("gsheets", type=GSheetsConnection)
-                    df_existente = conn.read(worksheet="Gastos", ttl="0m")
-                    
-                    novo_dado = pd.DataFrame([{
-                        "Data": data_gasto.strftime("%Y-%m-%d"),
-                        "Descricao": descricao_gasto,
-                        "Categoria": categoria_gasto,
-                        "Valor": float(valor_lancado)
-                    }])
-                    
-                    df_atualizado = pd.concat([df_existente, novo_dado], ignore_index=True)
-                    conn.update(worksheet="Gastos", data=df_atualizado)
-                    
-                    st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
-                    st.rerun()
-                    
-                except Exception as e:
-                    # Captura o caso onde o update retorna 200 (sucesso) mas cai no except por comportamento da biblioteca
-                    if "200" in str(e):
-                        st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
-                        st.rerun()
-                    else:
-                        st.error(f"Erro ao salvar: {e}")
+
+poup_dia20 = adiantamento * (porcentagem_guardar / 100)
+contas_dia20 = comprometido_total * proporcao_adiantamento
+retencao_dia20_total = poup_dia20 + contas_dia20
+pct_reter_dia20 = (retencao_dia20_total / adiantamento) * 100 if adiantamento > 0 else 0
+pct_do_salario_total_dia20 = (retencao_dia20_total / renda_total) * 100 if renda_total > 0 else 0
+
+poup_dia05 = salario_oficial * (porcentagem_guardar / 100)
+contas_dia05 = comprometido_total * proporcao_salario
+retencao_dia05_total = poup_dia05 + contas_dia05
+pct_reter_dia05 = (retencao_dia05_total / salario_oficial) * 100 if salario_oficial > 0 else 0
+pct_do_salario_total_dia05 = (retencao_dia05_total / renda_total) * 100 if renda_total > 0 else 0
+
+# Definição das colunas para os Cards Informativos
+col_card1, col_card2 = st.columns(2)
+
+with col_card1:
+    st.markdown(f"""
     <div class="card-info-azul">
         <div class="card-info-titulo">🏙️ Dia 20 (Adiantamento)</div>
         <div class="card-info-sub">Você deve reter {pct_reter_dia20:.1f}% deste adiantamento.</div>
@@ -185,24 +173,32 @@ with st.form(key="novo_gasto_form", clear_on_submit=True):
         if descricao_gasto == "":
             st.warning("Insira uma descrição para salvar.")
         else:
-            try:
-                from streamlit_gsheets import GSheetsConnection
-                conn = st.connection("gsheets", type=GSheetsConnection)
-                df_existente = conn.read(worksheet="Gastos", ttl="0m")
-                
-                novo_dado = pd.DataFrame([{
-                    "Data": data_gasto.strftime("%Y-%m-%d"),
-                    "Descricao": descricao_gasto,
-                    "Categoria": categoria_gasto,
-                    "Valor": float(valor_lancado)
-                }])
-                
-                df_atualizado = pd.concat([df_existente, novo_dado], ignore_index=True)
-                conn.update(worksheet="Gastos", data=df_atualizado)
-                st.success(f"🎉 '{descricao_gasto}' guardado!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
+            with st.spinner("Gravando dados na planilha..."):
+                try:
+                    from streamlit_gsheets import GSheetsConnection
+                    conn = st.connection("gsheets", type=GSheetsConnection)
+                    df_existente = conn.read(worksheet="Gastos", ttl="0m")
+                    
+                    novo_dado = pd.DataFrame([{
+                        "Data": data_gasto.strftime("%Y-%m-%d"),
+                        "Descricao": descricao_gasto,
+                        "Categoria": categoria_gasto,
+                        "Valor": float(valor_lancado)
+                    }])
+                    
+                    df_atualizado = pd.concat([df_existente, novo_dado], ignore_index=True)
+                    conn.update(worksheet="Gastos", data=df_atualizado)
+                    
+                    st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    # Captura o caso onde o update retorna 200 (sucesso) mas cai no except por comportamento da biblioteca
+                    if "200" in str(e):
+                        st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error(f"Erro ao salvar: {e}")
 
 st.divider()
 
