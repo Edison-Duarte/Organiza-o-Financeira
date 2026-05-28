@@ -1,2 +1,3 @@
-streamlit
+st-theme-ext
 pandas
+st-gsheets-connection
