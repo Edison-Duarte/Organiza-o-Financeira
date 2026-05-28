@@ -1,3 +1,3 @@
-st-theme-ext
 pandas
 st-gsheets-connection
+gspread
