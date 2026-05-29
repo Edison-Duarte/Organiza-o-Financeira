@@ -69,6 +69,28 @@ def carregar_gastos_reais():
 if "dados" not in st.session_state:
     st.session_state.dados = carregar_dados()
 
+# --- MAPEAMENTO E SOMA DE GASTOS REAIS DA PLANILHA ---
+df_planilha = carregar_gastos_reais()
+
+soma_mercado = 0.0
+soma_carro = 0.0
+soma_moto = 0.0
+soma_fixas = 0.0
+soma_lazer = 0.0
+
+if not df_planilha.empty and "Categoria" in df_planilha.columns and "Valor" in df_planilha.columns:
+    # Garante que os valores estão lidos como números
+    df_planilha["Valor"] = pd.to_numeric(df_planilha["Valor"], errors='coerce').fillna(0.0)
+    
+    # Agrupa e soma por categoria
+    somas_por_cat = df_planilha.groupby("Categoria")["Valor"].sum()
+    
+    soma_mercado = float(somas_por_cat.get("Supermercado / Alimentação", 0.0))
+    soma_moto = float(somas_por_cat.get("Combustível: Moto", 0.0))
+    soma_carro = float(somas_por_cat.get("Combustível: Carro", 0.0))
+    soma_fixas = float(somas_por_cat.get("Contas Fixas", 0.0))
+    soma_lazer = float(somas_por_cat.get("Outros / Lazer", 0.0))
+
 # Estilização customizada básica para os cartões de métricas
 st.markdown("""
     <style>
@@ -99,7 +121,6 @@ with col2:
     salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=st.session_state.dados["salario_oficial"], step=100.0, format="%.2f")
 
 renda_total = adiantamento + salario_oficial
-
 porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=int(st.session_state.dados["porcentagem_guardar"]), step=5)
 
 st.divider()
@@ -117,7 +138,10 @@ with gv_col1:
 with gv_col2:
     combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=st.session_state.dados["combustivel_moto"], step=20.0, format="%.2f")
 
+# O total de previstos permanece baseado nas suas estimativas do topo
 gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
+# Soma do que de fato já foi consumido de variáveis na planilha
+total_gastos_variaveis_realizados = soma_mercado + soma_carro + soma_moto
 
 st.divider()
 
@@ -142,11 +166,14 @@ contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + cl
 
 st.divider()
 
-# --- CÁLCULOS FINANCEIROS ---
+# --- CÁLCULOS FINANCEIROS ATUALIZADOS COM ABATIMENTO REAL ---
 valor_guardar = renda_total * (porcentagem_guardar / 100)
 
 if renda_total > 0:
-    saldo_livre = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total
+    # MATEMÁTICA REAL: Saldo livre inicial planejado MENOS o que você já gastou efetivamente em Lazer/Outros
+    saldo_inicial_lazer = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total
+    saldo_livre_atualizado = saldo_inicial_lazer - soma_lazer
+    
     p_adiantamento = adiantamento / renda_total
     p_oficial = salario_oficial / renda_total
     
@@ -164,7 +191,7 @@ if renda_total > 0:
     porcentagem_reter_dia05 = (total_reter_dia05 / salario_oficial) * 100 if salario_oficial > 0 else 0
     p_reter_d05_do_total = (total_reter_dia05 / renda_total) * 100
 else:
-    saldo_livre = 0.0
+    saldo_livre_atualizado = 0.0
     porcentagem_reter_dia20 = 0.0
     total_reter_dia20 = 0.0
     p_reter_d20_do_total = 0.0
@@ -177,8 +204,8 @@ else:
     poupança_dia05 = 0.0
     fixas_dia05 = 0.0
 
-# --- SEÇÃO 4: PAINEL DE RESULTADOS ---
-st.subheader("📊 Resumo Financeiro")
+# --- SEÇÃO 4: PAINEL DE RESULTADOS DINÂMICO ---
+st.subheader("📊 Resumo Financeiro Real")
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -186,17 +213,19 @@ with c1:
 with c2:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Poupança Total</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
 with c3:
-    st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
+    # Exibe o planejado vs quanto já foi pago de contas fixas
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas (Pagas)</div><div class="metric-value" style="color: #c62828;">R$ {soma_fixas:,.2f} <span style="font-size:12px; color:#777;">/ {contas_fixas_total:,.2f}</span></div></div>', unsafe_allow_html=True)
 with c4:
-    st.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis Previstas</div><div class="metric-value" style="color: #f57c00;">R$ {gastos_variaveis_total:,.2f}</div></div>', unsafe_allow_html=True)
+    # Exibe o previsto vs quanto já consumiu do teto de variáveis
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis (Gastos)</div><div class="metric-value" style="color: #f57c00;">R$ {total_gastos_variaveis_realizados:,.2f} <span style="font-size:12px; color:#777;">/ {gastos_variaveis_total:,.2f}</span></div></div>', unsafe_allow_html=True)
 
 st.markdown("")
 
 if renda_total > 0:
-    if saldo_livre >= 0:
-        st.success(f"### 🎉 Saldo Livre para Lazer: **R$ {saldo_livre:,.2f}**")
+    if saldo_livre_atualizado >= 0:
+        st.success(f"### 🎉 Saldo Livre Atual para Lazer: **R$ {saldo_livre_atualizado:,.2f}**")
     else:
-        st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
+        st.error(f"### ⚠️ Atenção! Orçamento de Lazer estourado em: **R$ {abs(saldo_livre_atualizado):,.2f}**")
 
     st.divider()
     st.subheader("📅 O que fazer quando o dinheiro cair?")
@@ -219,17 +248,19 @@ if renda_total > 0:
                 f"**Total a reter/guardar:** R$ {total_reter_dia05:,.2f}\n\n"
                 f"📌 *Junte com a reserva do dia 20 para pagar os boletos.*")
 
-    st.markdown("#### 📋 Distribuição Geral do Orçamento")
+    st.markdown("#### 📋 Distribuição Geral do Orçamento Real")
     
+    # Abas visuais de progresso de consumo do salário
     p_poupança = (valor_guardar / renda_total) * 100
     p_fixas = (contas_fixas_total / renda_total) * 100
     p_variaveis = (gastos_variaveis_total / renda_total) * 100
-    p_livre = (max(0.0, saldo_livre) / renda_total) * 100
+    p_livre = (max(0.0, saldo_livre_atualizado) / renda_total) * 100
 
     df_distribuicao = pd.DataFrame({
-        "Destino do Dinheiro": ["Poupança (Investimentos)", "Contas Fixas (Moradia/Consumo)", "Gastos Variáveis (Mercado/Combustíveis)", "Saldo Livre (Lazer/Hobbies)"],
-        "Valor Total (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {gastos_variaveis_total:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
-        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_variaveis:.1f}%", f"{p_livre:.1f}%"]
+        "Destino do Dinheiro": ["Poupança (Investimentos)", "Contas Fixas (Moradia/Consumo)", "Gastos Variáveis (Mercado/Combustíveis)", "Saldo Livre Atual (Lazer/Hobbies)"],
+        "Valor Limite/Teto (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {gastos_variaveis_total:,.2f}", f"R$ {max(0.0, saldo_inicial_lazer):,.2f}"],
+        "Consumido Real (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {soma_fixas:,.2f}", f"R$ {total_gastos_variaveis_realizados:,.2f}", f"R$ {soma_lazer:,.2f}"],
+        "Saldo Restante (R$)": [f"R$ 0.00", f"R$ {contas_fixas_total - soma_fixas:,.2f}", f"R$ {gastos_variaveis_total - total_gastos_variaveis_realizados:,.2f}", f"R$ {max(0.0, saldo_livre_atualizado):,.2f}"]
     })
     
     st.dataframe(df_distribuicao, hide_index=True, use_container_width=True)
