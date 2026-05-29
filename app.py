@@ -320,3 +320,91 @@ if df_gastos_reais.empty:
 else:
     # Mostra a tabela interativa com os gastos reais salvos
     st.dataframe(df_gastos_reais.sort_index(ascending=False), use_container_width=True)
+
+# =========================================================================
+# PARTE NOVA: INTEGRAÇÃO E ABATIMENTO DE GASTOS REAIS (PASSO 1)
+# =========================================================================
+
+import pytz
+from datetime import datetime
+
+# Garante que a timezone está definida para evitar o NameError
+try:
+    fuso_br = pytz.timezone('America/Sao_Paulo')
+    agora_br = datetime.now(fuso_br).date()
+except Exception:
+    agora_br = datetime.now().date()
+
+# 1. Função para buscar o histórico de gastos reais na planilha
+def carregar_gastos_reais():
+    try:
+        df = conn.read(worksheet="Gastos", ttl=0)
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        df = df.dropna(how="all")
+        return df
+    except Exception:
+        return pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
+
+st.divider()
+st.subheader("📝 Lançar Novo Gasto Efetuado (Real)")
+
+# 2. Formulário estruturado com as categorias exatas do seu planejamento
+with st.form("form_novo_gasto", clear_on_submit=True):
+    data_pagamento = st.date_input("Data do Pagamento", value=agora_br)
+    descricao_gasto = st.text_input("Descrição (Ex: Supermercado Carrefour, Posto Shell)")
+    
+    col_form1, col_form2 = st.columns(2)
+    categoria_gasto = col_form1.selectbox("Categoria do Gasto", [
+        "Supermercado / Alimentação", 
+        "Combustível: Moto", 
+        "Combustível: Carro", 
+        "Contas Fixas", 
+        "Outros / Lazer"
+    ])
+    valor_gasto = col_form2.number_input("Valor Pago - R$", min_value=0.01, value=0.01, step=0.01)
+    
+    botao_salvar = st.form_submit_button("Gravar Gasto na Planilha", type="primary")
+
+# 3. Lógica para processar e salvar o registro no Google Sheets
+if botao_salvar:
+    if not descricao_gasto.strip():
+        st.warning("⚠️ Por favor, insira uma descrição para salvar.")
+    else:
+        with st.spinner("Gravando dados na planilha..."):
+            try:
+                df_existente = carregar_gastos_reais()
+                
+                nova_linha = pd.DataFrame([{
+                    "Data": data_pagamento.strftime("%Y-%m-%d"),
+                    "Descricao": descricao_gasto,
+                    "Categoria": categoria_gasto,
+                    "Valor": float(valor_gasto)
+                }])
+                
+                df_atualizado = pd.concat([df_existente, nova_linha], ignore_index=True)
+                conn.update(worksheet="Gastos", data=df_atualizado)
+                
+                st.success(f"🎉 '{descricao_gasto}' gravado com sucesso!")
+                st.rerun()
+            except Exception as ex:
+                if "200" in str(ex):
+                    st.success(f"🎉 '{descricao_gasto}' gravado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error(f"Erro ao salvar na planilha: {ex}")
+
+# 4. Exibição da tabela histórica abaixo do formulário
+st.divider()
+st.subheader("📜 Extrato de Lançamentos Realizados")
+
+df_historico = carregar_gastos_reais()
+
+if df_historico.empty:
+    st.info("💡 Nenhum gasto real computado nesta aba da planilha ainda.")
+else:
+    # Garante a formatação correta dos valores na tabela para exibição
+    df_exibir = df_historico.copy()
+    if "Valor" in df_exibir.columns:
+        df_exibir["Valor"] = pd.to_numeric(df_exibir["Valor"]).map("R$ {:,.2f}".format)
+    
+    st.dataframe(df_exibir.sort_index(ascending=False), hide_index=True, use_container_width=True)
