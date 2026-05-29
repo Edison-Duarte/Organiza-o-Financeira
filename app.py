@@ -2,17 +2,15 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import pytz
-from datetime import datetime
 
 # Configuração da página para um visual limpo e moderno
 st.set_page_config(page_title="Gestão Financeira Mensal", page_icon="💰", layout="centered")
 
-# Fuso horário para registro de logs ou consistência temporal
-FUSO_HORARIO = pytz.timezone("America/Sao_Paulo")
-
 # --- CONEXÃO COM O GOOGLE SHEETS ---
-# Cria a conexão usando as credenciais definidas em [connections.gsheets] no Secrets
-conn = st.connection("gsheets", type=GSheetsConnection)
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception as e:
+    st.error(f"Erro crítico na inicialização da conexão: {e}")
 
 # Valores padrão caso a planilha esteja vazia ou falhe
 VALORES_PADRAO = {
@@ -32,25 +30,35 @@ VALORES_PADRAO = {
 }
 
 def carregar_dados_sheets():
-    """Tenta ler os dados da aba 'Gastos'. Se não existir ou falhar, retorna os padrões."""
+    """Tenta ler os dados da aba 'Gastos'. Se falhar ou estiver vazia, usa os padrões."""
     try:
-        # Lê os dados da aba 'Gastos'
+        # Tenta ler a aba 'Gastos'
         df = conn.read(worksheet="Gastos", ttl="0d")
-        if df.empty or "Chave" not in df.columns or "Valor" not in df.columns:
-            return VALORES_PADRAO
         
-        # Converte as colunas de volta para um dicionário Python
+        # Se o DataFrame veio vazio ou sem a estrutura correta, ativa o plano B
+        if df is None or df.empty or "Chave" not in df.columns or "Valor" not in df.columns:
+            return VALORES_PADRAO.copy()
+        
+        # Converte a tabela de volta para dicionário
         dados_salvos = dict(zip(df["Chave"], df["Valor"]))
         
-        # Garante que qualquer chave ausente seja preenchida com o padrão
+        # Garante que chaves novas/ausentes recebam o valor padrão
         for chave, valor in VALORES_PADRAO.items():
             dados_salvos.setdefault(chave, float(valor))
+            
+        # Garante conversão limpa para float/int numericamente correta
+        for k, v in dados_salvos.items():
+            if k == "porcentagem_guardar":
+                dados_salvos[k] = int(float(v))
+            else:
+                dados_salvos[k] = float(v)
+                
         return dados_salvos
-    except Exception as e:
-        # Se a aba não existir ainda, apenas usa os padrões
-        return VALORES_PADRAO
+    except Exception:
+        # Se a aba não existir ou der erro de API, ignora e carrega os dados padrão na tela
+        return VALORES_PADRAO.copy()
 
-# Inicializa o estado da sessão carregando os dados da planilha
+# Inicializa o estado da sessão carregando os dados
 if "dados" not in st.session_state:
     st.session_state.dados = carregar_dados_sheets()
 
@@ -79,13 +87,13 @@ st.subheader("📥 Recebimentos do Mês")
 
 col1, col2 = st.columns(2)
 with col1:
-    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=float(st.session_state.dados["adiantamento"]), step=100.0, format="%.2f")
+    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=st.session_state.dados["adiantamento"], step=100.0, format="%.2f")
 with col2:
-    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=float(st.session_state.dados["salario_oficial"]), step=100.0, format="%.2f")
+    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=st.session_state.dados["salario_oficial"], step=100.0, format="%.2f")
 
 renda_total = adiantamento + salario_oficial
 
-porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=int(st.session_state.dados["porcentagem_guardar"]), step=5)
+porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=st.session_state.dados["porcentagem_guardar"], step=5)
 
 st.divider()
 
@@ -96,11 +104,11 @@ st.write("Ajuste a previsão de despesas maleáveis para este mês:")
 gv_col1, gv_col2 = st.columns(2)
 
 with gv_col1:
-    compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=float(st.session_state.dados["compras_mes"]), step=50.0, format="%.2f")
-    combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=float(st.session_state.dados["combustivel_carro"]), step=50.0, format="%.2f")
+    compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=st.session_state.dados["compras_mes"], step=50.0, format="%.2f")
+    combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=st.session_state.dados["combustivel_carro"], step=50.0, format="%.2f")
 
 with gv_col2:
-    combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=float(st.session_state.dados["combustivel_moto"]), step=20.0, format="%.2f")
+    combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=st.session_state.dados["combustivel_moto"], step=20.0, format="%.2f")
 
 gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
 
@@ -113,15 +121,15 @@ st.write("Ajuste os valores reais de cada boleto de moradia e consumo:")
 cf_col1, cf_col2 = st.columns(2)
 
 with cf_col1:
-    financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=float(st.session_state.dados["financiamento"]), step=50.0, format="%.2f")
-    condominio = st.number_input("Condomínio - R$", min_value=0.0, value=float(st.session_state.dados["condominio"]), step=20.0, format="%.2f")
-    iptu = st.number_input("IPTU - R$", min_value=0.0, value=float(st.session_state.dados["iptu"]), step=10.0, format="%.2f")
-    seguro_residencial = st.number_input("Seguro Residencial - R$", min_value=0.0, value=float(st.session_state.dados["seguro_residencial"]), step=5.0, format="%.2f")
+    financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=st.session_state.dados["financiamento"], step=50.0, format="%.2f")
+    condominio = st.number_input("Condomínio - R$", min_value=0.0, value=st.session_state.dados["condominio"], step=20.0, format="%.2f")
+    iptu = st.number_input("IPTU - R$", min_value=0.0, value=st.session_state.dados["iptu"], step=10.0, format="%.2f")
+    seguro_residencial = st.number_input("Seguro Residencial - R$", min_value=0.0, value=st.session_state.dados["seguro_residencial"], step=5.0, format="%.2f")
 
 with cf_col2:
-    claro_tv_internet = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=float(st.session_state.dados["claro_tv_internet"]), step=10.0, format="%.2f")
-    luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=float(st.session_state.dados["luz"]), step=10.0, format="%.2f")
-    celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=float(st.session_state.dados["celular"]), step=5.0, format="%.2f")
+    claro_tv_internet = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=st.session_state.dados["claro_tv_internet"], step=10.0, format="%.2f")
+    luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=st.session_state.dados["luz"], step=10.0, format="%.2f")
+    celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=st.session_state.dados["celular"], step=5.0, format="%.2f")
 
 contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + claro_tv_internet + luz + celular
 
@@ -247,11 +255,11 @@ if st.button("Salvar Valores Atuais na Planilha", type="primary", use_container_
         # Monta o DataFrame estruturado para a planilha em formato chave-valor
         df_para_salvar = pd.DataFrame(list(novos_dados.items()), columns=["Chave", "Valor"])
         
-        # Sobrescreve a aba 'Gastos' com as novas configurações
+        # Sobrescreve/Gera a aba 'Gastos'
         conn.update(worksheet="Gastos", data=df_para_salvar)
         
-        # Atualiza o estado da sessão local do usuário
         st.session_state.dados = novos_dados
-        st.success("🎉 Valores atualizados e salvos com sucesso na sua planilha do Google Sheets!")
+        st.success("🎉 Valores salvos e sincronizados com a planilha!")
+        st.rerun()
     except Exception as e:
-        st.error(f"Erro ao salvar os dados no Google Sheets: {e}")
+        st.error(f"Erro ao salvar os dados no Google Sheets: {e}. Certifique-se de que a conta de serviço possui acesso de Editor.")
