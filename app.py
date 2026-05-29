@@ -1,20 +1,37 @@
-from fpdf import FPDF
-from streamlit_gsheets import GSheetsConnection
+import streamlit as st
 import pandas as pd
 from datetime import datetime
 import pytz
-import urllib.parse
-from fpdf import FPDF
-import io
 
-# --- CONFIGURAÇÕES DA PÁGINA ---
-st.set_page_config(page_title="Zelo Kitchen - Inspeção", page_icon="🍳", layout="wide")
+# Configuração da página (Deve ser a primeira linha)
+st.set_page_config(page_title="Gestão Financeira + Extrato", page_icon="💰", layout="centered")
 
-# CSS para interface geral e botões
+# Estilização para recriar os quadros informativos azuis do projeto financeiro
 st.markdown("""
     <style>
-        .main { background-color: #f9f9f9; }
-        .stButton>button { border-radius: 5px; height: 3em; width: 100%; }
+    .metric-box {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .metric-title { font-size: 14px; color: #555; font-weight: bold; }
+    .metric-value { font-size: 21px; color: #1e3d59; font-weight: bold; }
+    
+    .card-info-azul {
+        background-color: #e8f0fe;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #c2dbff;
+        margin-bottom: 15px;
+        min-height: 280px;
+    }
+    .card-info-titulo { font-size: 20px; font-weight: bold; color: #1967d2; margin-bottom: 12px; }
+    .card-info-sub { font-size: 14px; color: #1e3d59; font-weight: bold; margin-bottom: 8px; }
+    .card-info-insight { font-size: 13px; color: #5f6368; font-style: italic; margin-bottom: 15px; }
+    .card-info-lista { font-size: 14px; color: #3c4043; margin-left: 5px; margin-bottom: 6px; }
+    .card-info-total { font-size: 13px; color: #1967d2; font-weight: bold; margin-top: 12px; border-top: 1px dashed #c2dbff; padding-top: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -22,215 +39,196 @@ fuso_br = pytz.timezone('America/Sao_Paulo')
 def obter_agora_br():
     return datetime.now(fuso_br)
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
+st.title("💰 Gestão Financeira com Histórico Real")
+
+# --- CONEXÃO DIRETA E SEGURA VIA PANDAS (LEITURA) ---
+SHEET_ID = "1X74m1kSZIx_eLdGTb8ZOf4RNK-PrFWFlmdx4gtgig9Q"
+URL_PANDAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Gastos"
+
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception as e:
-    st.error(f"Erro na conexão com o banco de dados: {e}")
+    df_gastos_reais = pd.read_csv(URL_PANDAS)
+    df_gastos_reais = df_gastos_reais.dropna(how="all", axis=1)
+    # Garante cabeçalhos corretos do financeiro
+    for col in ["Data", "Descricao", "Categoria", "Valor"]:
+        if col not in df_gastos_reais.columns:
+            df_gastos_reais[col] = None
+except Exception:
+    df_gastos_reais = pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
 
-def carregar_dados():
-    try:
-        df = conn.read(ttl=0)
-        # Limpeza: Remove colunas "fantasmas" (Unnamed)
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+# --- SEÇÃO 1: RECEBIMENTOS DO MÊS ---
+st.subheader("📥 Recebimentos do Mês")
+col1, col2 = st.columns(2)
+with col1:
+    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=2082.22, format="%.2f")
+with col2:
+    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=3152.25, format="%.2f")
+
+renda_total = adiantamento + salario_oficial
+porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=10, step=5)
+poupança_total = renda_total * (porcentagem_guardar / 100)
+
+st.divider()
+
+# --- SEÇÃO 2: PROJEÇÕES DE GASTOS VARIÁVEIS E FIXOS ---
+st.subheader("🚗 Gastos Variáveis do Mês (Previsão)")
+col_v1, col_v2, col_v3 = st.columns(3)
+with col_v1:
+    proj_mercado = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=750.00, format="%.2f")
+with col_v2:
+    proj_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=120.00, format="%.2f")
+with col_v3:
+    proj_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=250.00, format="%.2f")
+
+variaveis_previstas = proj_mercado + proj_moto + proj_carro
+
+st.subheader("📌 Detalhamento das Contas Fixas (Previsão)")
+col_f1, col_f2 = st.columns(2)
+with col_f1:
+    f_financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=1400.00, format="%.2f")
+    f_condominio = st.number_input("Condomínio - R$", min_value=0.0, value=400.00, format="%.2f")
+    f_iptu = st.number_input("IPTU - R$", min_value=0.0, value=100.00, format="%.2f")
+    f_seguro = st.number_input("Seguro Residencial - R$", min_value=0.0, value=30.00, format="%.2f")
+with col_f2:
+    f_claro = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=150.00, format="%.2f")
+    f_luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=80.00, format="%.2f")
+    f_celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=40.00, format="%.2f")
+
+contas_fixas_total = f_financiamento + f_condominio + f_iptu + f_seguro + f_claro + f_luz + f_celular
+comprometido_total = contas_fixas_total + variaveis_previstas
+saldo_livre_lazer = renda_total - poupança_total - comprometido_total
+
+st.divider()
+
+# --- SEÇÃO 3: RESUMO FINANCEIRO E PAINEL METODOLÓGICO DOS DIAS ---
+st.subheader("📊 Resumo Financeiro Projetado")
+cq1, cq2, cq3, cq4 = st.columns(4)
+cq1.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
+cq2.markdown(f'<div class="metric-box"><div class="metric-title">Poupança Total</div><div class="metric-value" style="color: #2e7d32;">R$ {poupança_total:,.2f}</div></div>', unsafe_allow_html=True)
+cq3.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
+cq4.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis Previstas</div><div class="metric-value" style="color: #ef6c00;">R$ {variaveis_previstas:,.2f}</div></div>', unsafe_allow_html=True)
+
+st.info(f"🎉 **Saldo Livre Estimado para Lazer/Hobbies:** R$ {saldo_livre_lazer:,.2f}")
+
+st.subheader("📅 O que fazer quando o dinheiro cair?")
+
+proporcao_adiantamento = adiantamento / renda_total if renda_total > 0 else 0
+proporcao_salario = salario_oficial / renda_total if renda_total > 0 else 0
+
+poup_dia20 = adiantamento * (porcentagem_guardar / 100)
+contas_dia20 = comprometido_total * proporcao_adiantamento
+retencao_dia20_total = poup_dia20 + contas_dia20
+pct_reter_dia20 = (retencao_dia20_total / adiantamento) * 100 if adiantamento > 0 else 0
+pct_do_salario_total_dia20 = (retencao_dia20_total / renda_total) * 100 if renda_total > 0 else 0
+
+poup_dia05 = salario_oficial * (porcentagem_guardar / 100)
+contas_dia05 = comprometido_total * proporcao_salario
+retencao_dia05_total = poup_dia05 + contas_dia05
+pct_reter_dia05 = (retencao_dia05_total / salario_oficial) * 100 if salario_oficial > 0 else 0
+pct_do_salario_total_dia05 = (retencao_dia05_total / renda_total) * 100 if renda_total > 0 else 0
+
+col_card1, col_card2 = st.columns(2)
+
+with col_card1:
+    st.markdown(f"""
+    <div class="card-info-azul">
+        <div class="card-info-titulo">🏙️ Dia 20 (Adiantamento)</div>
+        <div class="card-info-sub">Você deve reter {pct_reter_dia20:.1f}% deste adiantamento.</div>
+        <div class="card-info-insight">💡 Isso equivale a {pct_do_salario_total_dia20:.1f}% do seu salário total.</div>
+        <div class="card-info-lista">🔹 <b>Poupar (Meta):</b> R$ {poup_dia20:,.2f}</div>
+        <div class="card-info-lista">🔹 <b>Reservar para Contas:</b> R$ {contas_dia20:,.2f}</div>
+        <div class="card-info-total">**Total a reter/guardar:** R$ {retencao_dia20_total:,.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_card2:
+    st.markdown(f"""
+    <div class="card-info-azul">
+        <div class="card-info-titulo">🩻 Dia 05 (Pagamento Oficial)</div>
+        <div class="card-info-sub">Você deve reter {pct_reter_dia05:.1f}% deste pagamento.</div>
+        <div class="card-info-insight">💡 Isso equivale a {pct_do_salario_total_dia05:.1f}% do seu salário total.</div>
+        <div class="card-info-lista">🔹 <b>Poupar (Meta):</b> R$ {poup_dia05:,.2f}</div>
+        <div class="card-info-lista">🔹 <b>Separar para Contas:</b> R$ {contas_dia05:,.2f}</div>
+        <div class="card-info-total">**Total a reter/guardar:** R$ {retencao_dia05_total:,.2f}</div>
+        <div style="font-size: 11px; color: #c62828; margin-top: 4px; font-weight: bold;">📌 Junte com a reserva do dia 20 para pagar os boletos.</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.divider()
+
+# --- SEÇÃO 4: LANÇAMENTO DE GASTO REAL NO GOOGLE SHEETS ---
+st.subheader("💸 Lançar Novo Gasto Efetuado (Real)")
+
+with st.form(key="novo_gasto_form", clear_on_submit=True):
+    col_data, col_desc = st.columns([1, 2])
+    with col_data:
+        data_gasto = st.date_input("Data do Pagamento", obter_agora_br())
+    with col_desc:
+        descricao_gasto = st.text_input("Descrição (Ex: Compras Mensais, Posto Shell)")
         
-        if not df.empty and "Data/Hora" in df.columns:
-            # Garante que a data seja lida corretamente
-            df["Data/Hora"] = pd.to_datetime(df["Data/Hora"], dayfirst=True)
-            
-            # Otimização: Cria colunas separadas no padrão Brasileiro
-            df["Data"] = df["Data/Hora"].dt.strftime('%d/%m/%Y')
-            df["Hora"] = df["Data/Hora"].dt.strftime('%H:%M')
+    col_cat, col_val = st.columns(2)
+    with col_cat:
+        categoria_gasto = st.selectbox("Categoria", ["Mercado", "Saídas/Lazer", "Passeios/Viagens", "Combustível Carro", "Combustível Moto", "Contas Fixas", "Outros"])
+    with col_val:
+        valor_lancado = st.number_input("Valor Pago - R$", min_value=0.01, step=5.0, format="%.2f")
         
-        # Otimização: Seleciona apenas as colunas únicas e corretas
-        colunas_desejadas = ["Data", "Hora", "Funcionário", "Setor", "Equipamento", "Status", "Falhas", "Descrição do Problema"]
-        
-        # Filtra apenas o que realmente deve aparecer
-        df_limpo = df[[c for c in colunas_desejadas if c in df.columns]]
-        return df_limpo
-    except Exception as e:
-        return pd.DataFrame(columns=["Data", "Hora", "Funcionário", "Setor", "Equipamento", "Status", "Falhas", "Descrição do Problema"])
+    botao_salvar = st.form_submit_button("Gravar Gasto na Planilha", type="primary", use_container_width=True)
 
-# --- FUNÇÃO PARA GERAR PDF ---
-def gerar_pdf(df_filtrado):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, "Relatorio de Nao Conformidades - Zelo Kitchen", ln=True, align="C")
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 10, f"Gerado em: {obter_agora_br().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
-    pdf.ln(10)
-
-    for i, row in df_filtrado.iterrows():
-        pdf.set_font("Arial", "B", 11)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.cell(190, 8, f"{row.get('Equipamento', 'N/A')} ({row.get('Setor', 'N/A')})", ln=True, fill=True)
-        pdf.set_font("Arial", "", 10)
-        desc = str(row.get('Descrição do Problema', '')).replace('\n', ' ') if row.get('Descrição do Problema') else "Nenhuma"
-        pdf.multi_cell(190, 7, f"Data: {row.get('Data', '')} {row.get('Hora', '')}\nInspetor: {row.get('Funcionário', '')}\nFalha: {row.get('Falhas', '')}\nDescricao: {desc}")
-        pdf.ln(5)
-    return pdf.output(dest='S').encode('latin-1')
-
-# --- ESTRUTURA DO CHECKLIST ---
-setores_lista = ["Espaço Café", "Cozinha", "Mirante", "Refeitório", "Bar Varanda Alta", "Lanchonete", "Sushi"]
-itens_setores = {
-    "Espaço Café": ["Máquina de Suco", "Estufa quente", "Estufa fria", "Geladeiras balcão", "Frigobares", "Máquina de café expresso"],
-    "Cozinha": ["Geladeiras Bacio di Latte", "Geladeiras Resfriados", "Câmaras Frias", "Freezers Horizontais", "Fornos", "Fogões", "Fritadeiras", "Chapas", "Geladeiras Balcões", "Coifas", "Pista Fria", "Banho Maria", "Máquina de Suco"],
-    "Mirante": ["Máquina de Suco", "Freezer Sorvete Dona Mazza", "Adega Vinhos", "Geladeiras", "Geladeiras Balcões", "Lava Louças", "Coifas", "Pista Fria", "Elevador Monta Carga", "Freezer Horizontal", "Churrasqueira", "Forno a Lenha"],
-    "Refeitório": ["Lava Louças", "Geladeira Resfriados", "Rechaud"],
-    "Bar Varanda Alta": ["Geladeira Bancada", "Freezer Bancada", "Máquina de Gelo"],
-    "Lanchonete": ["Geladeira Bacio de Latte", "Geladeiras Cervejas", "Máquina de Café", "Choppeira", "Estufa Salgados"],
-    "Sushi": ["Fogão", "Freezer Horizontal", "Geladeira Bancada", "Estufa Fria"]
-}
-
-st.title("🍳 Sistema de Inspeção Zelo Kitchen")
-tab1, tab2 = st.tabs(["📝 Nova Inspeção", "📜 Histórico"])
-
-# --- ABA 1: NOVA INSPEÇÃO ---
-with tab1:
-    if 'sucesso' in st.session_state and st.session_state.sucesso:
-        st.success("✅ Inspeção salva com sucesso na planilha!")
-        if st.button("Realizar Nova Inspeção"):
-            st.session_state.sucesso = False
-            st.rerun()
-    else:
-        with st.expander("📌 Identificação", expanded=True):
-            col1, col2 = st.columns(2)
-            nome_inspetor = col1.text_input("Seu Nome:")
-            setor_selecionado = col2.selectbox("Setor a Inspecionar:", ["Selecione..."] + setores_lista)
-
-        if setor_selecionado != "Selecione...":
-            respostas = []
-            for item in itens_setores[setor_selecionado]:
-                with st.container(border=True):
-                    st.write(f"**{item}**")
-                    c1, c2, c3 = st.columns(3)
-                    h = c1.radio(f"Higiene", ["OK", "NÃO"], key=f"h_{item}", horizontal=True)
-                    f = c2.radio(f"Funcionamento", ["OK", "NÃO"], key=f"f_{item}", horizontal=True)
-                    e = c3.radio(f"Estado Geral", ["OK", "NÃO"], key=f"e_{item}", horizontal=True)
+    if botao_salvar:
+        if descricao_gasto == "":
+            st.warning("Insira uma descrição para salvar.")
+        else:
+            with st.spinner("Gravando dados na planilha..."):
+                try:
+                    from streamlit_gsheets import GSheetsConnection
+                    conn = st.connection("gsheets", type=GSheetsConnection)
+                    df_existente = conn.read(worksheet="Gastos", ttl="0m")
                     
-                    detalhes_obs = ""
-                    if any(x == "NÃO" for x in [h, f, e]):
-                        detalhes_obs = st.text_area(f"Descreva o problema:", key=f"obs_{item}")
+                    novo_dado = pd.DataFrame([{
+                        "Data": data_gasto.strftime("%Y-%m-%d"),
+                        "Descricao": descricao_gasto,
+                        "Categoria": categoria_gasto,
+                        "Valor": float(valor_lancado)
+                    }])
                     
-                    respostas.append({"Equipamento": item, "H": h, "F": f, "E": e, "Detalhes": detalhes_obs})
+                    df_atualizado = pd.concat([df_existente, novo_dado], ignore_index=True)
+                    conn.update(worksheet="Gastos", data=df_atualizado)
+                    
+                    st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    if "200" in str(e):
+                        st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error(f"Erro ao salvar: {e}")
 
-            if st.button("🚀 FINALIZAR E SALVAR", type="primary"):
-                if not nome_inspetor:
-                    st.error("Por favor, preencha o nome do inspetor.")
-                else:
-                    with st.spinner("A conectar ao banco de dados e salvando..."):
-                        agora = obter_agora_br().strftime("%d/%m/%Y %H:%M")
-                        novas_entradas = []
-                        for r in respostas:
-                            f_list = [n for n, v in zip(["Higiene", "Funcionamento", "Estado"], [r["H"], r["F"], r["E"]]) if v == "NÃO"]
-                            novas_entradas.append({
-                                "Data/Hora": agora, "Funcionário": nome_inspetor, "Setor": setor_selecionado,
-                                "Equipamento": r["Equipamento"], "Status": "❌ FALHA" if f_list else "✅ OK",
-                                "Falhas": ", ".join(f_list) if f_list else "Nenhuma", "Descrição do Problema": r["Detalhes"]
-                            })
-                        
-                        try:
-                            # Tenta ler os dados e limpa as colunas geradas automaticamente por indexações antigas
-                            df_atual = conn.read(ttl=0)
-                            df_atual = df_atual.loc[:, ~df_atual.columns.str.contains('^Unnamed')]
-                            
-                            df_final = pd.concat([df_atual, pd.DataFrame(novas_entradas)], ignore_index=True)
-                            conn.update(data=df_final)
-                            
-                            st.session_state.sucesso = True
-                            st.rerun()
-                            
-                        except Exception as ex:
-                            # Caso o erro retornado seja falso positivo (código HTTP 200 encapsulado como string)
-                            if "200" in str(ex): 
-                                st.session_state.sucesso = True
-                                st.rerun()
-                            else: 
-                                st.error("❌ Erro técnico ao gravar na Planilha Google:")
-                                st.info("Se o erro persistir, certifique-se de que o e-mail da Conta de Serviço está adicionado como 'Editor' na partilha direta da sua planilha.")
-                                st.exception(ex)
+st.divider()
 
-# --- ABA 2: HISTÓRICO ---
-with tab2:
-    st.subheader("📜 Histórico de Registros")
-    df_hist = carregar_dados()
+# --- SEÇÃO 5: EXTRAÇÃO E COMPARATIVO DO REAL ---
+st.subheader("📉 Extrato Histórico e Lançamentos do Mês")
+
+df_gastos_reais = df_gastos_reais.dropna(subset=["Valor"])
+
+if not df_gastos_reais.empty and len(df_gastos_reais) > 0:
+    df_gastos_reais["Valor"] = pd.to_numeric(df_gastos_reais["Valor"])
+    df_agrupado = df_gastos_reais.groupby("Categoria")["Valor"].sum().reset_index()
+    total_gasto_real = df_agrupado["Valor"].sum()
     
-    if not df_hist.empty:
-        with st.expander("🔍 Filtros de Busca", expanded=True):
-            col_d1, col_d2 = st.columns(2)
-            data_min = pd.to_datetime(df_hist["Data"], dayfirst=True).min().date()
-            data_max = pd.to_datetime(df_hist["Data"], dayfirst=True).max().date()
-            
-            d_ini = col_d1.date_input("Início", value=data_min)
-            d_fim = col_d2.date_input("Fim", value=data_max)
-            
-            f_set = st.multiselect("Setores", options=setores_lista, default=setores_lista)
-            f_sta = st.multiselect("Status", options=["✅ OK", "❌ FALHA"], default=["❌ FALHA"])
-
-        # Aplicação dos filtros
-        df_hist["dt_temp"] = pd.to_datetime(df_hist["Data"], dayfirst=True).dt.date
-        mask = (df_hist["dt_temp"] >= d_ini) & (df_hist["dt_temp"] <= d_fim) & \
-               (df_hist["Setor"].isin(f_set)) & (df_hist["Status"].isin(f_sta))
-        
-        df_filtrado = df_hist[mask].drop(columns=["dt_temp"]).sort_values(by=["Data", "Hora"], ascending=False)
-        
-        # TABELA HTML EM INLINE COM QUEBRA DE LINHA FORÇADA
-        if not df_filtrado.empty:
-            html_tabela = """
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
-            <style>
-                body { background-color: transparent !important; font-family: sans-serif; }
-                th { background-color: #2c3e50 !important; color: white !important; font-size: 14px; position: sticky; top: 0; }
-                td { font-size: 13px; vertical-align: middle; word-break: break-word !important; white-space: normal !important; }
-                .table-container { max-height: 450px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; }
-            </style>
-            <div class="table-container">
-                <table class="table table-striped table-hover m-0">
-                    <thead>
-                        <tr>
-                            <th>Data</th><th>Hora</th><th>Funcionário</th><th>Setor</th><th>Equipamento</th><th>Status</th><th>Falhas</th><th>Descrição do Problema</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """
-            for _, row in df_filtrado.iterrows():
-                desc_p = row.get('Descrição do Problema', '')
-                desc_p = str(desc_p) if pd.notna(desc_p) else ""
-                
-                html_tabela += f"""
-                        <tr>
-                            <td>{row.get('Data','')}</td>
-                            <td>{row.get('Hora','')}</td>
-                            <td>{row.get('Funcionário','')}</td>
-                            <td>{row.get('Setor','')}</td>
-                            <td>{row.get('Equipamento','')}</td>
-                            <td>{row.get('Status','')}</td>
-                            <td>{row.get('Falhas','')}</td>
-                            <td style="min-width: 250px; max-width: 400px;">{desc_p}</td>
-                        </tr>
-                """
-            html_tabela += "</tbody></table></div>"
-            
-            st.components.v1.html(html_tabela, height=460, scrolling=False)
-        else:
-            st.write("Nenhum dado corresponde aos filtros selecionados.")
-
-        # --- SEÇÃO DE RELATÓRIO ---
-        st.divider()
-        st.subheader("📊 Enviar Relatório de Não Conformidades")
-        st.info("💡 **Aviso:** O relatório enviado será baseado exclusivamente no conteúdo **filtrado** na tabela acima.")
-        
-        if not df_filtrado.empty:
-            texto_rel = f"*RELATÓRIO ZELO KITCHEN - {obter_agora_br().strftime('%d/%m/%Y')}*\n\n"
-            for _, row in df_filtrado.iterrows():
-                texto_rel += f"⚠️ *{row['Equipamento']}* ({row['Setor']})\nFalha: {row['Falhas']}\nObs: {row['Descrição do Problema']}\n---\n"
-            
-            col_rel1, col_rel2, col_rel3 = st.columns(3)
-            col_rel1.link_button("🟢 WhatsApp", f"https://wa.me/?text={urllib.parse.quote(texto_rel)}", use_container_width=True)
-            col_rel2.link_button("📧 E-mail", f"mailto:?subject=Relatorio&body={urllib.parse.quote(texto_rel)}", use_container_width=True)
-            col_rel3.download_button("📥 PDF", gerar_pdf(df_filtrado), f"Relatorio_{obter_agora_br().strftime('%Y%m%d')}.pdf", "application/pdf", use_container_width=True)
-        else:
-            st.warning("Não há falhas para exibir com os filtros atuais.")
+    st.bar_chart(data=df_agrupado, x="Categoria", y="Valor", color="#1e3d59")
+    
+    df_exibicao = df_agrupado.copy()
+    df_exibicao["Valor"] = df_exibicao["Valor"].map("R$ {:,.2f}".format)
+    st.dataframe(df_exibicao, hide_index=True, use_container_width=True)
+    
+    saldo_real_caixa = renda_total - poupança_total - total_gasto_real
+    if saldo_real_caixa >= 0:
+        st.success(f"### 💳 Saldo Atual em Conta (Real): **R$ {saldo_real_caixa:,.2f}**")
     else:
-        st.info("Nenhum registro encontrado.")
+        st.error(f"### ⚠️ Caixa estourado em: **R$ {abs(saldo_real_caixa):,.2f}**")
+        
+    df_extrato = df_gastos_reais.sort_values(by="Data", ascending=False).copy()
+    df_extrato["Valor"] = df_extrato["Valor"].map("R$ {:,.2f}".format)
+    st.dataframe(df_extrato, hide_index=True, use_container_width=True)
+else:
+    st.info("💡 Nenhum gasto real computado ainda na planilha.")
