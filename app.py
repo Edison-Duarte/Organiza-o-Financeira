@@ -213,10 +213,8 @@ with c1:
 with c2:
     st.markdown(f'<div class="metric-box"><div class="metric-title">Poupança Total</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
 with c3:
-    # Exibe o planejado vs quanto já foi pago de contas fixas
     st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas (Pagas)</div><div class="metric-value" style="color: #c62828;">R$ {soma_fixas:,.2f} <span style="font-size:12px; color:#777;">/ {contas_fixas_total:,.2f}</span></div></div>', unsafe_allow_html=True)
 with c4:
-    # Exibe o previsto vs quanto já consumiu do teto de variáveis
     st.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis (Gastos)</div><div class="metric-value" style="color: #f57c00;">R$ {total_gastos_variaveis_realizados:,.2f} <span style="font-size:12px; color:#777;">/ {gastos_variaveis_total:,.2f}</span></div></div>', unsafe_allow_html=True)
 
 st.markdown("")
@@ -250,12 +248,6 @@ if renda_total > 0:
 
     st.markdown("#### 📋 Distribuição Geral do Orçamento Real")
     
-    # Abas visuais de progresso de consumo do salário
-    p_poupança = (valor_guardar / renda_total) * 100
-    p_fixas = (contas_fixas_total / renda_total) * 100
-    p_variaveis = (gastos_variaveis_total / renda_total) * 100
-    p_livre = (max(0.0, saldo_livre_atualizado) / renda_total) * 100
-
     df_distribuicao = pd.DataFrame({
         "Destino do Dinheiro": ["Poupança (Investimentos)", "Contas Fixas (Moradia/Consumo)", "Gastos Variáveis (Mercado/Combustíveis)", "Saldo Livre Atual (Lazer/Hobbies)"],
         "Valor Limite/Teto (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {gastos_variaveis_total:,.2f}", f"R$ {max(0.0, saldo_inicial_lazer):,.2f}"],
@@ -314,12 +306,13 @@ with st.form("form_novo_gasto", clear_on_submit=True):
         "Contas Fixas", 
         "Outros / Lazer"
     ])
-    valor_gasto = col_form2.number_input("Valor Pago - R$", min_value=0.01, value=0.01, step=0.01)
+    valor_gasto = col_form2.number_input("Valor Pago - R$", min_value=0.01, value=0.01, step=0.01, format="%.2f")
     
     botao_salvar = st.form_submit_button("Gravar Gasto na Planilha", type="primary")
 
 if botao_salvar:
-    if not descricao_gasto.strip():
+    descricao_limpa = descricao_gasto.strip()
+    if not descricao_limpa:
         st.warning("⚠️ Por favor, insira uma descrição para salvar.")
     else:
         with st.spinner("Gravando dados na planilha..."):
@@ -328,19 +321,22 @@ if botao_salvar:
                 
                 nova_linha = pd.DataFrame([{
                     "Data": data_pagamento.strftime("%Y-%m-%d"),
-                    "Descricao": descricao_gasto,
+                    "Descricao": descricao_limpa,
                     "Categoria": categoria_gasto,
                     "Valor": float(valor_gasto)
                 }])
                 
+                # Concatena e higieniza contra colunas sem nome criadas pelo Sheets
                 df_atualizado = pd.concat([df_existente, nova_linha], ignore_index=True)
+                df_atualizado = df_atualizado.loc[:, ~df_atualizado.columns.str.contains('^Unnamed')]
+                
                 conn.update(worksheet="Gastos", data=df_atualizado)
                 
-                st.success(f"🎉 '{descricao_gasto}' gravado com sucesso!")
+                st.success(f"🎉 '{descricao_limpa}' gravado com sucesso!")
                 st.rerun()
             except Exception as ex:
                 if "200" in str(ex):
-                    st.success(f"🎉 '{descricao_gasto}' gravado com sucesso!")
+                    st.success(f"🎉 '{descricao_limpa}' gravado com sucesso!")
                     st.rerun()
                 else:
                     st.error(f"Erro ao salvar na planilha: {ex}")
@@ -355,6 +351,7 @@ if df_historico.empty:
 else:
     df_exibir = df_historico.copy()
     if "Valor" in df_exibir.columns:
-        df_exibir["Valor"] = pd.to_numeric(df_exibir["Valor"]).map("R$ {:,.2f}".format)
+        df_exibir["Valor"] = pd.to_numeric(df_exibir["Valor"], errors='coerce').fillna(0.0).map("R$ {:,.2f}".format)
     
-    st.dataframe(df_exibir.sort_index(ascending=False), hide_index=True, use_container_width=True)
+    # Exibe de forma segura de trás para frente usando fatiamento nativo do pandas
+    st.dataframe(df_exibir.iloc[::-1], hide_index=True, use_container_width=True)
