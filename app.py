@@ -1,47 +1,58 @@
 import streamlit as st
 import pandas as pd
-import json
-import os
+from streamlit_gsheets import GSheetsConnection
+import pytz
+from datetime import datetime
 
 # Configuração da página para um visual limpo e moderno
 st.set_page_config(page_title="Gestão Financeira Mensal", page_icon="💰", layout="centered")
 
-# Nome do arquivo onde os dados serão salvos localmente
-ARQUIVO_DADOS = "dados_mes.json"
+# Fuso horário para registro de logs ou consistência temporal
+FUSO_HORARIO = pytz.timezone("America/Sao_Paulo")
 
-# --- FUNÇÕES DE PERSISTÊNCIA DE DADOS ---
-def carregar_dados():
-    """Carrega os dados salvos do último uso. Se não existirem, usa os padrões iniciais."""
-    valores_padrao = {
-        "adiantamento": 2082.22,
-        "salario_oficial": 3152.25,
-        "porcentagem_guardar": 10,
-        "compras_mes": 750.00,
-        "combustivel_carro": 250.00,
-        "combustivel_moto": 120.00,
-        "financiamento": 1400.00,
-        "condominio": 400.00,
-        "iptu": 100.00,
-        "seguro_residencial": 30.00,
-        "claro_tv_internet": 150.00,
-        "luz": 80.00,
-        "celular": 40.00
-    }
-    
-    if os.path.exists(ARQUIVO_DADOS):
-        try:
-            with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
-                dados_salvos = json.load(f)
-                for chave, valor in valores_padrao.items():
-                    dados_salvos.setdefault(chave, valor)
-                return dados_salvos
-        except Exception:
-            return valores_padrao
-    return valores_padrao
+# --- CONEXÃO COM O GOOGLE SHEETS ---
+# Cria a conexão usando as credenciais definidas em [connections.gsheets] no Secrets
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Inicializa ou carrega os dados no estado da sessão do Streamlit
+# Valores padrão caso a planilha esteja vazia ou falhe
+VALORES_PADRAO = {
+    "adiantamento": 2082.22,
+    "salario_oficial": 3152.25,
+    "porcentagem_guardar": 10,
+    "compras_mes": 750.00,
+    "combustivel_carro": 250.00,
+    "combustivel_moto": 120.00,
+    "financiamento": 1400.00,
+    "condominio": 400.00,
+    "iptu": 100.00,
+    "seguro_residencial": 30.00,
+    "claro_tv_internet": 150.00,
+    "luz": 80.00,
+    "celular": 40.00
+}
+
+def carregar_dados_sheets():
+    """Tenta ler os dados da aba 'Gastos'. Se não existir ou falhar, retorna os padrões."""
+    try:
+        # Lê os dados da aba 'Gastos'
+        df = conn.read(worksheet="Gastos", ttl="0d")
+        if df.empty or "Chave" not in df.columns or "Valor" not in df.columns:
+            return VALORES_PADRAO
+        
+        # Converte as colunas de volta para um dicionário Python
+        dados_salvos = dict(zip(df["Chave"], df["Valor"]))
+        
+        # Garante que qualquer chave ausente seja preenchida com o padrão
+        for chave, valor in VALORES_PADRAO.items():
+            dados_salvos.setdefault(chave, float(valor))
+        return dados_salvos
+    except Exception as e:
+        # Se a aba não existir ainda, apenas usa os padrões
+        return VALORES_PADRAO
+
+# Inicializa o estado da sessão carregando os dados da planilha
 if "dados" not in st.session_state:
-    st.session_state.dados = carregar_dados()
+    st.session_state.dados = carregar_dados_sheets()
 
 # Estilização customizada básica para os cartões de métricas
 st.markdown("""
@@ -59,7 +70,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("💰 Gestão de Salário & Planejamento Mensal")
-st.write("Os campos abaixo exibem os valores salvos do seu último acesso. Altere-os e clique em salvar no final da página.")
+st.write("Os campos abaixo exibem os valores armazenados no seu Google Sheets. Altere-os e clique em salvar no final.")
 
 st.divider()
 
@@ -68,9 +79,9 @@ st.subheader("📥 Recebimentos do Mês")
 
 col1, col2 = st.columns(2)
 with col1:
-    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=st.session_state.dados["adiantamento"], step=100.0, format="%.2f")
+    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=float(st.session_state.dados["adiantamento"]), step=100.0, format="%.2f")
 with col2:
-    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=st.session_state.dados["salario_oficial"], step=100.0, format="%.2f")
+    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=float(st.session_state.dados["salario_oficial"]), step=100.0, format="%.2f")
 
 renda_total = adiantamento + salario_oficial
 
@@ -85,11 +96,11 @@ st.write("Ajuste a previsão de despesas maleáveis para este mês:")
 gv_col1, gv_col2 = st.columns(2)
 
 with gv_col1:
-    compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=st.session_state.dados["compras_mes"], step=50.0, format="%.2f")
-    combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=st.session_state.dados["combustivel_carro"], step=50.0, format="%.2f")
+    compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=float(st.session_state.dados["compras_mes"]), step=50.0, format="%.2f")
+    combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=float(st.session_state.dados["combustivel_carro"]), step=50.0, format="%.2f")
 
 with gv_col2:
-    combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=st.session_state.dados["combustivel_moto"], step=20.0, format="%.2f")
+    combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=float(st.session_state.dados["combustivel_moto"]), step=20.0, format="%.2f")
 
 gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
 
@@ -102,15 +113,15 @@ st.write("Ajuste os valores reais de cada boleto de moradia e consumo:")
 cf_col1, cf_col2 = st.columns(2)
 
 with cf_col1:
-    financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=st.session_state.dados["financiamento"], step=50.0, format="%.2f")
-    condominio = st.number_input("Condomínio - R$", min_value=0.0, value=st.session_state.dados["condominio"], step=20.0, format="%.2f")
-    iptu = st.number_input("IPTU - R$", min_value=0.0, value=st.session_state.dados["iptu"], step=10.0, format="%.2f")
-    seguro_residencial = st.number_input("Seguro Residencial - R$", min_value=0.0, value=st.session_state.dados["seguro_residencial"], step=5.0, format="%.2f")
+    financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=float(st.session_state.dados["financiamento"]), step=50.0, format="%.2f")
+    condominio = st.number_input("Condomínio - R$", min_value=0.0, value=float(st.session_state.dados["condominio"]), step=20.0, format="%.2f")
+    iptu = st.number_input("IPTU - R$", min_value=0.0, value=float(st.session_state.dados["iptu"]), step=10.0, format="%.2f")
+    seguro_residencial = st.number_input("Seguro Residencial - R$", min_value=0.0, value=float(st.session_state.dados["seguro_residencial"]), step=5.0, format="%.2f")
 
 with cf_col2:
-    claro_tv_internet = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=st.session_state.dados["claro_tv_internet"], step=10.0, format="%.2f")
-    luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=st.session_state.dados["luz"], step=10.0, format="%.2f")
-    celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=st.session_state.dados["celular"], step=5.0, format="%.2f")
+    claro_tv_internet = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=float(st.session_state.dados["claro_tv_internet"]), step=10.0, format="%.2f")
+    luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=float(st.session_state.dados["luz"]), step=10.0, format="%.2f")
+    celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=float(st.session_state.dados["celular"]), step=5.0, format="%.2f")
 
 contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + claro_tv_internet + luz + celular
 
@@ -180,16 +191,16 @@ if renda_total > 0:
         st.info(f"### 🏦 Dia 20 (Adiantamento)\n"
                 f"Você deve reter **{porcentagem_reter_dia20:.1f}%** deste adiantamento.\n\n"
                 f"💡 *Isso equivale a **{p_reter_d20_do_total:.1f}%** do seu salário total.*\n\n"
-                f"*   **Poupar (Meta):** R$ {poupança_dia20:,.2f}\n"
-                f"*   **Reservar para Contas:** R$ {fixas_dia20:,.2f}\n"
+                f"* **Poupar (Meta):** R$ {poupança_dia20:,.2f}\n"
+                f"* **Reservar para Contas:** R$ {fixas_dia20:,.2f}\n"
                 f"**Total a reter/guardar:** R$ {total_reter_dia20:,.2f}")
                 
     with col_d05:
         st.info(f"### 🏢 Dia 05 (Pagamento Oficial)\n"
                 f"Você deve reter **{porcentagem_reter_dia05:.1f}%** deste pagamento.\n\n"
                 f"💡 *Isso equivale a **{p_reter_d05_do_total:.1f}%** do seu salário total.*\n\n"
-                f"*   **Poupar (Meta):** R$ {poupança_dia05:,.2f}\n"
-                f"*   **Separar para Contas:** R$ {fixas_dia05:,.2f}\n"
+                f"* **Poupar (Meta):** R$ {poupança_dia05:,.2f}\n"
+                f"* **Separar para Contas:** R$ {fixas_dia05:,.2f}\n"
                 f"**Total a reter/guardar:** R$ {total_reter_dia05:,.2f}\n\n"
                 f"📌 *Junte com a reserva do dia 20 para pagar os boletos.*")
 
@@ -210,12 +221,12 @@ if renda_total > 0:
 else:
     st.info("💡 Insira os valores de Adiantamento e Pagamento no topo para recalcular todo o ecossistema financeiro.")
 
-# --- SEÇÃO DE PERSISTÊNCIA (SALVAR DADOS) ---
+# --- SEÇÃO DE PERSISTÊNCIA (SALVAR NO GOOGLE SHEETS) ---
 st.divider()
-st.subheader("💾 Gerenciamento de Histórico")
-st.write("Sempre que alterar os valores e quiser transformá-los no novo padrão de abertura do app, clique abaixo:")
+st.subheader("💾 Gerenciamento de Histórico (Nuvem)")
+st.write("Sempre que alterar os valores e quiser transformá-los no novo padrão, clique abaixo para salvar na nuvem:")
 
-if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container_width=True):
+if st.button("Salvar Valores Atuais na Planilha", type="primary", use_container_width=True):
     novos_dados = {
         "adiantamento": adiantamento,
         "salario_oficial": salario_oficial,
@@ -231,10 +242,16 @@ if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container
         "luz": luz,
         "celular": celular
     }
+    
     try:
-        with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
-            json.dump(novos_dados, f, ensure_ascii=False, indent=4)
+        # Monta o DataFrame estruturado para a planilha em formato chave-valor
+        df_para_salvar = pd.DataFrame(list(novos_dados.items()), columns=["Chave", "Valor"])
+        
+        # Sobrescreve a aba 'Gastos' com as novas configurações
+        conn.update(worksheet="Gastos", data=df_para_salvar)
+        
+        # Atualiza o estado da sessão local do usuário
         st.session_state.dados = novos_dados
-        st.success("🎉 Valores salvos com sucesso! No próximo acesso, o app abrirá exatamente assim.")
+        st.success("🎉 Valores atualizados e salvos com sucesso na sua planilha do Google Sheets!")
     except Exception as e:
-        st.error(f"Erro ao salvar os dados localmente: {e}")
+        st.error(f"Erro ao salvar os dados no Google Sheets: {e}")
