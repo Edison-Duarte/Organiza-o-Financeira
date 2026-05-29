@@ -2,9 +2,17 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 import pytz
+from datetime import datetime
 
 # Configuração da página para um visual limpo e moderno
 st.set_page_config(page_title="Gestão Financeira Mensal", page_icon="💰", layout="centered")
+
+# --- CONFIGURAÇÃO DE FUSO HORÁRIO ---
+FUSO_HORARIO = pytz.timezone("America/Sao_Paulo")
+
+def obter_agora_br():
+    """Retorna a data atual no fuso horário de Brasília."""
+    return datetime.now(FUSO_HORARIO).date()
 
 # --- CONEXÃO COM O GOOGLE SHEETS ---
 try:
@@ -32,21 +40,16 @@ VALORES_PADRAO = {
 def carregar_dados_sheets():
     """Tenta ler os dados da aba 'Gastos'. Se falhar ou estiver vazia, usa os padrões."""
     try:
-        # Tenta ler a aba 'Gastos'
         df = conn.read(worksheet="Gastos", ttl="0d")
         
-        # Se o DataFrame veio vazio ou sem a estrutura correta, ativa o plano B
         if df is None or df.empty or "Chave" not in df.columns or "Valor" not in df.columns:
             return VALORES_PADRAO.copy()
         
-        # Converte a tabela de volta para dicionário
         dados_salvos = dict(zip(df["Chave"], df["Valor"]))
         
-        # Garante que chaves novas/ausentes recebam o valor padrão
         for chave, valor in VALORES_PADRAO.items():
             dados_salvos.setdefault(chave, float(valor))
             
-        # Garante conversão limpa para float/int numericamente correta
         for k, v in dados_salvos.items():
             if k == "porcentagem_guardar":
                 dados_salvos[k] = int(float(v))
@@ -55,10 +58,9 @@ def carregar_dados_sheets():
                 
         return dados_salvos
     except Exception:
-        # Se a aba não existir ou der erro de API, ignora e carrega os dados padrão na tela
         return VALORES_PADRAO.copy()
 
-# Inicializa o estado da sessão carregando os dados
+# Inicializa o estado da sessão carregando os dados de planejamento
 if "dados" not in st.session_state:
     st.session_state.dados = carregar_dados_sheets()
 
@@ -143,14 +145,12 @@ if renda_total > 0:
     p_adiantamento = adiantamento / renda_total
     p_oficial = salario_oficial / renda_total
     
-    # Proporções e Totais do Adiantamento (Dia 20)
     poupança_dia20 = adiantamento * (porcentagem_guardar / 100)
     fixas_dia20 = contas_fixas_total * p_adiantamento
     total_reter_dia20 = poupança_dia20 + fixas_dia20
     porcentagem_reter_dia20 = (total_reter_dia20 / adiantamento) * 100 if adiantamento > 0 else 0
     p_reter_d20_do_total = (total_reter_dia20 / renda_total) * 100
     
-    # Proporções e Totais do Pagamento Oficial (Dia 05)
     poupança_dia05 = salario_oficial * (porcentagem_guardar / 100)
     fixas_dia05 = contas_fixas_total * p_oficial
     total_reter_dia05 = poupança_dia05 + fixas_dia05
@@ -229,12 +229,12 @@ if renda_total > 0:
 else:
     st.info("💡 Insira os valores de Adiantamento e Pagamento no topo para recalcular todo o ecossistema financeiro.")
 
-# --- SEÇÃO DE PERSISTÊNCIA (SALVAR NO GOOGLE SHEETS) ---
+# --- SEÇÃO DE PERSISTÊNCIA DO PLANEJAMENTO (ABA GASTOS) ---
 st.divider()
 st.subheader("💾 Gerenciamento de Histórico (Nuvem)")
 st.write("Sempre que alterar os valores e quiser transformá-los no novo padrão, clique abaixo para salvar na nuvem:")
 
-if st.button("Salvar Valores Atuais na Planilha", type="primary", use_container_width=True):
+if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container_width=True):
     novos_dados = {
         "adiantamento": adiantamento,
         "salario_oficial": salario_oficial,
@@ -252,14 +252,57 @@ if st.button("Salvar Valores Atuais na Planilha", type="primary", use_container_
     }
     
     try:
-        # Monta o DataFrame estruturado para a planilha em formato chave-valor
         df_para_salvar = pd.DataFrame(list(novos_dados.items()), columns=["Chave", "Valor"])
-        
-        # Sobrescreve/Gera a aba 'Gastos'
         conn.update(worksheet="Gastos", data=df_para_salvar)
-        
         st.session_state.dados = novos_dados
-        st.success("🎉 Valores salvos e sincronizados com a planilha!")
+        st.success("🎉 Padrão mensal salvo com sucesso!")
         st.rerun()
     except Exception as e:
-        st.error(f"Erro ao salvar os dados no Google Sheets: {e}. Certifique-se de que a conta de serviço possui acesso de Editor.")
+        st.error(f"Erro ao salvar os dados na aba 'Gastos': {e}")
+
+# --- SEÇÃO DE LANÇAMENTO DE GASTOS DIÁRIOS (ABA LANCAMENTOS) ---
+st.divider()
+st.subheader("📝 Lançar Novo Gasto Efetuado (Real)")
+
+with st.form("formulario_gastos_reais", clear_on_submit=True):
+    data_pagamento = st.date_input("Data do Pagamento", value=obter_agora_br())
+    descricao_gasto = st.text_input("Descrição do Gasto (Ex: Mercado Extra, Posto Ipiranga, Almoço)")
+    categoria_gasto = st.selectbox("Categoria do Gasto", [
+        "Alimentação/Mercado", 
+        "Combustível Carro", 
+        "Combustível Moto", 
+        "Contas Fixas", 
+        "Lazer/Outros"
+    ])
+    valor_gasto = st.number_input("Valor do Gasto - R$", min_value=0.0, format="%.2f", step=5.0)
+    
+    botao_lancar = st.form_submit_button("Confirmar Lançamento Real", type="primary")
+
+    if botao_lancar:
+        if descricao_gasto and valor_gasto > 0:
+            try:
+                # Tenta ler os lançamentos já existentes na aba 'Lancamentos' para empilhar
+                try:
+                    df_existente = conn.read(worksheet="Lancamentos", ttl="0d")
+                except Exception:
+                    # Se a aba ainda não existir, cria a tabela estruturada do zero
+                    df_existente = pd.DataFrame(columns=["Data", "Descrição", "Categoria", "Valor"])
+                
+                # Monta o novo registro
+                novo_registro = pd.DataFrame([{
+                    "Data": data_pagamento.strftime("%Y-%m-%d"),
+                    "Descrição": descricao_gasto,
+                    "Categoria": categoria_gasto,
+                    "Valor": valor_gasto
+                }])
+                
+                # Junta o histórico antigo com o novo dado
+                df_atualizado = pd.concat([df_existente, novo_registro], ignore_index=True)
+                
+                # Atualiza na planilha (Aba 'Lancamentos')
+                conn.update(worksheet="Lancamentos", data=df_atualizado)
+                st.success(f"🎉 Sucesso! R$ {valor_gasto:.2f} adicionado à aba 'Lancamentos'.")
+            except Exception as e:
+                st.error(f"Erro ao salvar lançamento no Google Sheets: {e}")
+        else:
+            st.warning("Preencha a descrição do gasto e insira um valor maior que R$ 0.00.")
