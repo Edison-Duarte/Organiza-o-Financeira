@@ -1,3 +1,4 @@
-st-theme-ext
+streamlit
+streamlit-gsheets
 pandas
-st-gsheets-connection
+pytz
