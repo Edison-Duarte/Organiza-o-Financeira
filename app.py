@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import pytz
+from streamlit_gsheets import GSheetsConnection
 
 # Configuração da página (Deve ser a primeira linha)
 st.set_page_config(page_title="Gestão Financeira + Extrato", page_icon="💰", layout="centered")
@@ -41,18 +42,23 @@ def obter_agora_br():
 
 st.title("💰 Gestão Financeira com Histórico Real")
 
-# --- CONEXÃO DIRETA E SEGURA VIA PANDAS (LEITURA) ---
-SHEET_ID = "1X74m1kSZIx_eLdGTb8ZOf4RNK-PrFWFlmdx4gtgig9Q"
-URL_PANDAS = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Gastos"
-
+# --- CONEXÃO SEGURO VIA GSHEETS CONNECTION ---
 try:
-    df_gastos_reais = pd.read_csv(URL_PANDAS)
-    df_gastos_reais = df_gastos_reais.dropna(how="all", axis=1)
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    # Mudamos para ler diretamente usando a API autenticada pela Service Account
+    df_gastos_reais = conn.read(worksheet="Gastos", ttl=0)
+    
+    # Limpeza de colunas fantasmas e vazias
+    if df_gastos_reais is not None and not df_gastos_reais.empty:
+        df_gastos_reais = df_gastos_reais.loc[:, ~df_gastos_reais.columns.str.contains('^Unnamed')]
+        df_gastos_reais = df_gastos_reais.dropna(how="all")
+    
     # Garante cabeçalhos corretos do financeiro
     for col in ["Data", "Descricao", "Categoria", "Valor"]:
         if col not in df_gastos_reais.columns:
             df_gastos_reais[col] = None
-except Exception:
+except Exception as e:
+    st.error(f"Erro na conexão com a planilha: {e}")
     df_gastos_reais = pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
 
 # --- SEÇÃO 1: RECEBIMENTOS DO MÊS ---
@@ -136,7 +142,7 @@ with col_card1:
         <div class="card-info-insight">💡 Isso equivale a {pct_do_salario_total_dia20:.1f}% do seu salário total.</div>
         <div class="card-info-lista">🔹 <b>Poupar (Meta):</b> R$ {poup_dia20:,.2f}</div>
         <div class="card-info-lista">🔹 <b>Reservar para Contas:</b> R$ {contas_dia20:,.2f}</div>
-        <div class="card-info-total">**Total a reter/guardar:** R$ {retencao_dia20_total:,.2f}</div>
+        <div class="card-info-total"><b>Total a reter/guardar:</b> R$ {retencao_dia20_total:,.2f}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -148,7 +154,7 @@ with col_card2:
         <div class="card-info-insight">💡 Isso equivale a {pct_do_salario_total_dia05:.1f}% do seu salário total.</div>
         <div class="card-info-lista">🔹 <b>Poupar (Meta):</b> R$ {poup_dia05:,.2f}</div>
         <div class="card-info-lista">🔹 <b>Separar para Contas:</b> R$ {contas_dia05:,.2f}</div>
-        <div class="card-info-total">**Total a reter/guardar:** R$ {retencao_dia05_total:,.2f}</div>
+        <div class="card-info-total"><b>Total a reter/guardar:</b> R$ {retencao_dia05_total:,.2f}</div>
         <div style="font-size: 11px; color: #c62828; margin-top: 4px; font-weight: bold;">📌 Junte com a reserva do dia 20 para pagar os boletos.</div>
     </div>
     """, unsafe_allow_html=True)
@@ -179,9 +185,9 @@ with st.form(key="novo_gasto_form", clear_on_submit=True):
         else:
             with st.spinner("Gravando dados na planilha..."):
                 try:
-                    from streamlit_gsheets import GSheetsConnection
-                    conn = st.connection("gsheets", type=GSheetsConnection)
-                    df_existente = conn.read(worksheet="Gastos", ttl="0m")
+                    df_existente = conn.read(worksheet="Gastos", ttl=0)
+                    if df_existente is not None:
+                        df_existente = df_existente.loc[:, ~df_existente.columns.str.contains('^Unnamed')].dropna(how="all")
                     
                     novo_dado = pd.DataFrame([{
                         "Data": data_gasto.strftime("%Y-%m-%d"),
@@ -194,6 +200,7 @@ with st.form(key="novo_gasto_form", clear_on_submit=True):
                     conn.update(worksheet="Gastos", data=df_atualizado)
                     
                     st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
+                    st.header("") # Pequeno espaçador visual antes do rerun
                     st.rerun()
                     
                 except Exception as e:
@@ -208,9 +215,10 @@ st.divider()
 # --- SEÇÃO 5: EXTRAÇÃO E COMPARATIVO DO REAL ---
 st.subheader("📉 Extrato Histórico e Lançamentos do Mês")
 
-df_gastos_reais = df_gastos_reais.dropna(subset=["Valor"])
+if df_gastos_reais is not None and not df_gastos_reais.empty:
+    df_gastos_reais = df_gastos_reais.dropna(subset=["Valor"])
 
-if not df_gastos_reais.empty and len(df_gastos_reais) > 0:
+if df_gastos_reais is not None and not df_gastos_reais.empty and len(df_gastos_reais) > 0:
     df_gastos_reais["Valor"] = pd.to_numeric(df_gastos_reais["Valor"])
     df_agrupado = df_gastos_reais.groupby("Categoria")["Valor"].sum().reset_index()
     total_gasto_real = df_agrupado["Valor"].sum()
