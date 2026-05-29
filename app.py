@@ -1,4 +1,4 @@
-import streamlit as st
+from fpdf import FPDF
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
