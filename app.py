@@ -1,130 +1,240 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-from datetime import datetime
-import pytz
+import json
+import os
 
-# --- CONFIGURAÇÕES DA PÁGINA ---
-st.set_page_config(page_title="Gestão Financeira + Extrato", page_icon="📊", layout="wide")
+# Configuração da página para um visual limpo e moderno
+st.set_page_config(page_title="Gestão Financeira Mensal", page_icon="💰", layout="centered")
 
-fuso_br = pytz.timezone('America/Sao_Paulo')
-def obter_agora_br():
-    return datetime.now(fuso_br)
+# Nome do arquivo onde os dados serão salvos localmente
+ARQUIVO_DADOS = "dados_mes.json"
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception as e:
-    st.error(f"Erro na conexão com o Google Sheets: {e}")
-
-# Função para carregar os gastos reais gravados na aba "Gastos"
-def carregar_gastos():
-    try:
-        # Lê a aba/worksheet "Gastos"
-        df = conn.read(worksheet="Gastos", ttl=0)
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-        return df
-    except Exception:
-        return pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
-
-# --- INTERFACE: ENTRADA DE DADOS DO ORÇAMENTO MENSAL ---
-st.title("📊 Gestão Financeira Pessoal")
-
-with st.expander("📌 Configurar Orçamento do Mês", expanded=False):
-    st.subheader("💰 Recebimentos do Mês")
-    col1, col2 = st.columns(2)
-    adiantamento = col1.number_input("Adiantamento (Dia 20) - R$", value=2082.22, step=100.0)
-    pagamento_oficial = col2.number_input("Pagamento Oficial (Dia 05) - R$", value=3152.25, step=100.0)
+# --- FUNÇÕES DE PERSISTÊNCIA DE DADOS ---
+def carregar_dados():
+    """Carrega os dados salvos do último uso. Se não existirem, usa os padrões iniciais."""
+    valores_padrao = {
+        "adiantamento": 2082.22,
+        "salario_oficial": 3152.25,
+        "porcentagem_guardar": 10,
+        "compras_mes": 750.00,
+        "combustivel_carro": 250.00,
+        "combustivel_moto": 120.00,
+        "financiamento": 1400.00,
+        "condominio": 400.00,
+        "iptu": 100.00,
+        "seguro_residencial": 30.00,
+        "claro_tv_internet": 150.00,
+        "luz": 80.00,
+        "celular": 40.00
+    }
     
-    porcentagem_poupar = st.slider("Porcentagem que deseja guardar este mês:", 0, 100, 10)
-    
-    st.subheader("🚗 Gastos Variáveis do Mês")
-    col_v1, col_v2, col_v3 = st.columns(3)
-    supermercado = col_v1.number_input("Supermercado / Alimentação - R$", value=750.00)
-    moto = col_v2.number_input("Combustível: Moto - R$", value=120.00)
-    carro = col_v3.number_input("Combustível: Carro - R$", value=250.00)
-    
-    st.subheader("📌 Detalhamento das Contas Fixas")
-    col_f1, col_f2 = st.columns(2)
-    financiamento = col_f1.number_input("Financiamento do Ap - R$", value=1400.00)
-    condominio = col_f1.number_input("Condomínio - R$", value=400.00)
-    iptu = col_f1.number_input("IPTU - R$", value=100.00)
-    seguro = col_f1.number_input("Seguro Residencial - R$", value=30.00)
-    
-    claro = col_f2.number_input("Claro (Internet/TV) - R$", value=150.00)
-    luz = col_f2.number_input("Conta de Luz - R$", value=80.00)
-    celular = col_f2.number_input("Conta de Celular - R$", value=40.00)
+    if os.path.exists(ARQUIVO_DADOS):
+        try:
+            with open(ARQUIVO_DADOS, "r", encoding="utf-8") as f:
+                dados_salvos = json.load(f)
+                for chave, valor in valores_padrao.items():
+                    dados_salvos.setdefault(chave, valor)
+                return dados_salvos
+        except Exception:
+            return valores_padrao
+    return valores_padrao
 
-# --- CÁLCULOS DO PLANEJAMENTO ---
-renda_total = adiantamento + pagamento_oficial
-poupanca_total = renda_total * (porcentagem_poupar / 100)
-contas_fixas_total = financiamento + condominio + iptu + seguro + claro + luz + celular
-variaveis_total = supermercado + moto + carro
-saldo_lazer = renda_total - poupanca_total - contas_fixas_total - variaveis_total
+# Inicializa ou carrega os dados no estado da sessão do Streamlit
+if "dados" not in st.session_state:
+    st.session_state.dados = carregar_dados()
 
-# --- BLOCOS DE RESUMO FINANCEIRO ---
-st.subheader("📊 Resumo Financeiro")
-c_res1, c_res2, c_res3, c_res4 = st.columns(4)
-c_res1.metric("Renda Total", f"R$ {renda_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", "."))
-c_res2.metric("Poupança Total", f"R$ {poupanca_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", "."))
-c_res3.metric("Contas Fixas", f"R$ {contas_fixas_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", "."))
-c_res4.metric("Variáveis Previstas", f"R$ {variaveis_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", "."))
+# Estilização customizada básica para os cartões de métricas
+st.markdown("""
+    <style>
+    .metric-box {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .metric-title { font-size: 14px; color: #555; font-weight: bold; }
+    .metric-value { font-size: 22px; color: #1e3d59; font-weight: bold; }
+    </style>
+""", unsafe_allow_html=True)
 
-st.success(f"🎉 **Saldo Livre para Lazer: R$ {saldo_lazer:,.2f}**".replace(",", "v").replace(".", ",").replace("v", "."))
+st.title("💰 Gestão de Salário & Planejamento Mensal")
+st.write("Os campos abaixo exibem os valores salvos do seu último acesso. Altere-os e clique em salvar no final da página.")
 
-# --- FORMULÁRIO: LANÇAR NOVO GASTO REAL ---
 st.divider()
-st.subheader("📝 Lançar Novo Gasto Efetuado (Real)")
 
-with st.form("form_novo_gasto", clear_on_submit=True):
-    data_pagamento = st.date_input("Data do Pagamento", value=obter_agora_br().date())
-    descricao_gasto = st.text_input("Descrição (Ex: Compras Mensais, Posto Shell)")
-    
-    col_form1, col_form2 = st.columns(2)
-    categoria_gasto = col_form1.selectbox("Categoria", ["Mercado", "Combustível Moto", "Combustível Carro", "Lazer", "Contas Fixas", "Outros"])
-    valor_gasto = col_form2.number_input("Valor Pago - R$", min_value=0.01, value=0.01, step=0.01)
-    
-    botao_salvar = st.form_submit_button("Gravar Gasto na Planilha")
+# --- SEÇÃO 1: ENTRADAS DE RENDA ---
+st.subheader("📥 Recebimentos do Mês")
 
-if botao_salvar:
-    if not descricao_gasto.strip():
-        st.warning("⚠️ Insira uma descrição para salvar.")
-    else:
-        with st.spinner("Gravando dados..."):
-            try:
-                # Carrega o histórico existente para fazer o append
-                df_existente = conn.read(worksheet="Gastos", ttl=0)
-                df_existente = df_existente.loc[:, ~df_existente.columns.str.contains('^Unnamed')]
-                
-                # Prepara a nova linha
-                nova_linha = pd.DataFrame([{
-                    "Data": data_pagamento.strftime("%Y/%m/%d"),
-                    "Descricao": descricao_gasto,
-                    "Categoria": categoria_gasto,
-                    "Valor": valor_gasto
-                }])
-                
-                # Agrupa e atualiza
-                df_atualizado = pd.concat([df_existente, nova_linha], ignore_index=True)
-                conn.update(worksheet="Gastos", data=df_atualizado)
-                st.success("✅ Gasto gravado com sucesso na planilha!")
-                st.rerun()
-            except Exception as ex:
-                if "200" in str(ex):
-                    st.success("✅ Gasto gravado com sucesso!")
-                    st.rerun()
-                else:
-                    st.error(f"Erro ao salvar: {ex}")
+col1, col2 = st.columns(2)
+with col1:
+    adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=st.session_state.dados["adiantamento"], step=100.0, format="%.2f")
+with col2:
+    salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=st.session_state.dados["salario_oficial"], step=100.0, format="%.2f")
 
-# --- TABELA: EXTRATO HISTÓRICO ---
+renda_total = adiantamento + salario_oficial
+
+porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=int(st.session_state.dados["porcentagem_guardar"]), step=5)
+
 st.divider()
-st.subheader("📜 Extrato Histórico e Lançamentos do Mês")
 
-df_gastos_reais = carregar_gastos()
+# --- SEÇÃO 2: GASTOS VARIÁVEIS (MERCADO E COMBUSTÍVEL) ---
+st.subheader("🚗 Gastos Variáveis do Mês")
+st.write("Ajuste a previsão de despesas maleáveis para este mês:")
 
-if df_gastos_reais.empty:
-    st.info("💡 Nenhum gasto real computado ainda na planilha.")
+gv_col1, gv_col2 = st.columns(2)
+
+with gv_col1:
+    compras_mes = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=st.session_state.dados["compras_mes"], step=50.0, format="%.2f")
+    combustivel_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=st.session_state.dados["combustivel_carro"], step=50.0, format="%.2f")
+
+with gv_col2:
+    combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=st.session_state.dados["combustivel_moto"], step=20.0, format="%.2f")
+
+gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
+
+st.divider()
+
+# --- SEÇÃO 3: DETALHAMENTO DE CONTAS FIXAS ---
+st.subheader("📌 Detalhamento das Contas Fixas")
+st.write("Ajuste os valores reais de cada boleto de moradia e consumo:")
+
+cf_col1, cf_col2 = st.columns(2)
+
+with cf_col1:
+    financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=st.session_state.dados["financiamento"], step=50.0, format="%.2f")
+    condominio = st.number_input("Condomínio - R$", min_value=0.0, value=st.session_state.dados["condominio"], step=20.0, format="%.2f")
+    iptu = st.number_input("IPTU - R$", min_value=0.0, value=st.session_state.dados["iptu"], step=10.0, format="%.2f")
+    seguro_residencial = st.number_input("Seguro Residencial - R$", min_value=0.0, value=st.session_state.dados["seguro_residencial"], step=5.0, format="%.2f")
+
+with cf_col2:
+    claro_tv_internet = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=st.session_state.dados["claro_tv_internet"], step=10.0, format="%.2f")
+    luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=st.session_state.dados["luz"], step=10.0, format="%.2f")
+    celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=st.session_state.dados["celular"], step=5.0, format="%.2f")
+
+contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + claro_tv_internet + luz + celular
+
+st.divider()
+
+# --- CÁLCULOS FINANCEIROS ---
+valor_guardar = renda_total * (porcentagem_guardar / 100)
+
+if renda_total > 0:
+    saldo_livre = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total
+    p_adiantamento = adiantamento / renda_total
+    p_oficial = salario_oficial / renda_total
+    
+    # Proporções e Totais do Adiantamento (Dia 20)
+    poupança_dia20 = adiantamento * (porcentagem_guardar / 100)
+    fixas_dia20 = contas_fixas_total * p_adiantamento
+    total_reter_dia20 = poupança_dia20 + fixas_dia20
+    porcentagem_reter_dia20 = (total_reter_dia20 / adiantamento) * 100 if adiantamento > 0 else 0
+    p_reter_d20_do_total = (total_reter_dia20 / renda_total) * 100
+    
+    # Proporções e Totais do Pagamento Oficial (Dia 05)
+    poupança_dia05 = salario_oficial * (porcentagem_guardar / 100)
+    fixas_dia05 = contas_fixas_total * p_oficial
+    total_reter_dia05 = poupança_dia05 + fixas_dia05
+    porcentagem_reter_dia05 = (total_reter_dia05 / salario_oficial) * 100 if salario_oficial > 0 else 0
+    p_reter_d05_do_total = (total_reter_dia05 / renda_total) * 100
 else:
-    # Formata a exibição da tabela de histórico de gastos
-    df_exibicao = df_gastos_reais.copy()
-    st.dataframe(df_exibicao, use_container_width=True)
+    saldo_livre = 0.0
+    porcentagem_reter_dia20 = 0.0
+    total_reter_dia20 = 0.0
+    p_reter_d20_do_total = 0.0
+    poupança_dia20 = 0.0
+    fixas_dia20 = 0.0
+    
+    porcentagem_reter_dia05 = 0.0
+    total_reter_dia05 = 0.0
+    p_reter_d05_do_total = 0.0
+    poupança_dia05 = 0.0
+    fixas_dia05 = 0.0
+
+# --- SEÇÃO 4: PAINEL DE RESULTADOS ---
+st.subheader("📊 Resumo Financeiro")
+
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
+with c2:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Poupança Total</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
+with c3:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
+with c4:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis Previstas</div><div class="metric-value" style="color: #f57c00;">R$ {gastos_variaveis_total:,.2f}</div></div>', unsafe_allow_html=True)
+
+st.markdown("")
+
+if renda_total > 0:
+    if saldo_livre >= 0:
+        st.success(f"### 🎉 Saldo Livre para Lazer: **R$ {saldo_livre:,.2f}**")
+    else:
+        st.error(f"### ⚠️ Atenção! Orçamento estourado em: **R$ {abs(saldo_livre):,.2f}**")
+
+    st.divider()
+    st.subheader("📅 O que fazer quando o dinheiro cair?")
+    
+    col_d20, col_d05 = st.columns(2)
+    with col_d20:
+        st.info(f"### 🏦 Dia 20 (Adiantamento)\n"
+                f"Você deve reter **{porcentagem_reter_dia20:.1f}%** deste adiantamento.\n\n"
+                f"💡 *Isso equivale a **{p_reter_d20_do_total:.1f}%** do seu salário total.*\n\n"
+                f"*   **Poupar (Meta):** R$ {poupança_dia20:,.2f}\n"
+                f"*   **Reservar para Contas:** R$ {fixas_dia20:,.2f}\n"
+                f"**Total a reter/guardar:** R$ {total_reter_dia20:,.2f}")
+                
+    with col_d05:
+        st.info(f"### 🏢 Dia 05 (Pagamento Oficial)\n"
+                f"Você deve reter **{porcentagem_reter_dia05:.1f}%** deste pagamento.\n\n"
+                f"💡 *Isso equivale a **{p_reter_d05_do_total:.1f}%** do seu salário total.*\n\n"
+                f"*   **Poupar (Meta):** R$ {poupança_dia05:,.2f}\n"
+                f"*   **Separar para Contas:** R$ {fixas_dia05:,.2f}\n"
+                f"**Total a reter/guardar:** R$ {total_reter_dia05:,.2f}\n\n"
+                f"📌 *Junte com a reserva do dia 20 para pagar os boletos.*")
+
+    st.markdown("#### 📋 Distribuição Geral do Orçamento")
+    
+    p_poupança = (valor_guardar / renda_total) * 100
+    p_fixas = (contas_fixas_total / renda_total) * 100
+    p_variaveis = (gastos_variaveis_total / renda_total) * 100
+    p_livre = (max(0.0, saldo_livre) / renda_total) * 100
+
+    df_distribuicao = pd.DataFrame({
+        "Destino do Dinheiro": ["Poupança (Investimentos)", "Contas Fixas (Moradia/Consumo)", "Gastos Variáveis (Mercado/Combustíveis)", "Saldo Livre (Lazer/Hobbies)"],
+        "Valor Total (R$)": [f"R$ {valor_guardar:,.2f}", f"R$ {contas_fixas_total:,.2f}", f"R$ {gastos_variaveis_total:,.2f}", f"R$ {max(0.0, saldo_livre):,.2f}"],
+        "Porcentagem do Salário": [f"{p_poupança:.1f}%", f"{p_fixas:.1f}%", f"{p_variaveis:.1f}%", f"{p_livre:.1f}%"]
+    })
+    
+    st.dataframe(df_distribuicao, hide_index=True, use_container_width=True)
+else:
+    st.info("💡 Insira os valores de Adiantamento e Pagamento no topo para recalcular todo o ecossistema financeiro.")
+
+# --- SEÇÃO DE PERSISTÊNCIA (SALVAR DADOS) ---
+st.divider()
+st.subheader("💾 Gerenciamento de Histórico")
+st.write("Sempre que alterar os valores e quiser transformá-los no novo padrão de abertura do app, clique abaixo:")
+
+if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container_width=True):
+    novos_dados = {
+        "adiantamento": adiantamento,
+        "salario_oficial": salario_oficial,
+        "porcentagem_guardar": porcentagem_guardar,
+        "compras_mes": compras_mes,
+        "combustivel_carro": combustivel_carro,
+        "combustivel_moto": combustivel_moto,
+        "financiamento": financiamento,
+        "condominio": condominio,
+        "iptu": iptu,
+        "seguro_residencial": seguro_residencial,
+        "claro_tv_internet": claro_tv_internet,
+        "luz": luz,
+        "celular": celular
+    }
+    try:
+        with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+            json.dump(novos_dados, f, ensure_ascii=False, indent=4)
+        st.session_state.dados = novos_dados
+        st.success("🎉 Valores salvos com sucesso! No próximo acesso, o app abrirá exatamente assim.")
+    except Exception as e:
+        st.error(f"Erro ao salvar os dados localmente: {e}")
