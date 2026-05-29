@@ -238,3 +238,85 @@ if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container
         st.success("🎉 Valores salvos com sucesso! No próximo acesso, o app abrirá exatamente assim.")
     except Exception as e:
         st.error(f"Erro ao salvar os dados localmente: {e}")
+
+# =========================================================================
+# PARTE NOVA: INTEGRAÇÃO COM OS GASTOS REAIS (ADICIONE NO FINAL DO SEU APP)
+# =========================================================================
+
+# 1. Função para buscar o que já foi gravado na planilha
+def carregar_gastos():
+    try:
+        # Busca os dados especificamente da aba "Gastos"
+        df = conn.read(worksheet="Gastos", ttl=0)
+        # Remove colunas fantasmas que o Excel/Sheets às vezes cria
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        return df
+    except Exception:
+        # Se a planilha estiver totalmente vazia (sem linhas), cria a estrutura básica
+        return pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
+
+st.divider()
+st.subheader("📝 Lançar Novo Gasto Efetuado (Real)")
+
+# 2. Formulário para capturar o novo gasto
+with st.form("form_novo_gasto", clear_on_submit=True):
+    data_pagamento = st.date_input("Data do Pagamento", value=obter_agora_br().date())
+    descricao_gasto = st.text_input("Descrição (Ex: Compras no Carrefour, Posto Shell)")
+    
+    col_form1, col_form2 = st.columns(2)
+    # As categorias abaixo devem bater com as variáveis estimadas para o abatimento futuro
+    categoria_gasto = col_form1.selectbox("Categoria do Gasto", [
+        "Supermercado / Alimentação", 
+        "Combustível: Moto", 
+        "Combustível: Carro", 
+        "Contas Fixas", 
+        "Lazer / Outros"
+    ])
+    valor_gasto = col_form2.number_input("Valor Pago - R$", min_value=0.01, value=0.01, step=0.01)
+    
+    botao_salvar = st.form_submit_button("Gravar Gasto na Planilha")
+
+# 3. Lógica que envia o dado para a planilha Google Sheets ao clicar no botão
+if botao_salvar:
+    if not descricao_gasto.strip():
+        st.warning("⚠️ Por favor, insira uma descrição para conseguir salvar.")
+    else:
+        with st.spinner("Conectando ao Google Sheets e gravando..."):
+            try:
+                # Carrega o que já existe lá para não apagar o histórico
+                df_existente = conn.read(worksheet="Gastos", ttl=0)
+                df_existente = df_existente.loc[:, ~df_existente.columns.str.contains('^Unnamed')]
+                
+                # Prepara a nova linha formatada
+                nova_linha = pd.DataFrame([{
+                    "Data": data_pagamento.strftime("%d/%m/%Y"),
+                    "Descricao": descricao_gasto,
+                    "Categoria": categoria_gasto,
+                    "Valor": valor_gasto
+                }])
+                
+                # Junta o histórico com o novo gasto e atualiza a planilha
+                df_atualizado = pd.concat([df_existente, nova_linha], ignore_index=True)
+                conn.update(worksheet="Gastos", data=df_atualizado)
+                
+                st.success("✅ Gasto gravado com sucesso!")
+                st.rerun()
+            except Exception as ex:
+                # Tratamento para evitar falsos erros de timeout do gsheets
+                if "200" in str(ex):
+                    st.success("✅ Gasto gravado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error(f"Erro ao salvar na planilha: {ex}")
+
+# 4. Exibição da tabela histórica de Lançamentos abaixo do formulário
+st.divider()
+st.subheader("📜 Extrato de Lançamentos Realizados")
+
+df_gastos_reais = carregar_gastos()
+
+if df_gastos_reais.empty:
+    st.info("💡 Nenhum gasto real computado nesta aba da planilha ainda.")
+else:
+    # Mostra a tabela interativa com os gastos reais salvos
+    st.dataframe(df_gastos_reais.sort_index(ascending=False), use_container_width=True)
