@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-import pytz
 from streamlit_gsheets import GSheetsConnection
+from datetime import datetime
 
-# Configuração da página (Deve ser a primeira linha)
+# Configuração da página
 st.set_page_config(page_title="Gestão Financeira + Extrato", page_icon="💰", layout="centered")
 
-# Estilização para recriar os quadros informativos azuis do projeto financeiro
+# Estilização customizada básica para os cartões de métricas
 st.markdown("""
     <style>
     .metric-box {
@@ -18,51 +17,24 @@ st.markdown("""
         margin-bottom: 10px;
     }
     .metric-title { font-size: 14px; color: #555; font-weight: bold; }
-    .metric-value { font-size: 21px; color: #1e3d59; font-weight: bold; }
-    
-    .card-info-azul {
-        background-color: #e8f0fe;
-        padding: 20px;
-        border-radius: 8px;
-        border: 1px solid #c2dbff;
-        margin-bottom: 15px;
-        min-height: 280px;
-    }
-    .card-info-titulo { font-size: 20px; font-weight: bold; color: #1967d2; margin-bottom: 12px; }
-    .card-info-sub { font-size: 14px; color: #1e3d59; font-weight: bold; margin-bottom: 8px; }
-    .card-info-insight { font-size: 13px; color: #5f6368; font-style: italic; margin-bottom: 15px; }
-    .card-info-lista { font-size: 14px; color: #3c4043; margin-left: 5px; margin-bottom: 6px; }
-    .card-info-total { font-size: 13px; color: #1967d2; font-weight: bold; margin-top: 12px; border-top: 1px dashed #c2dbff; padding-top: 8px; }
+    .metric-value { font-size: 22px; color: #1e3d59; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-fuso_br = pytz.timezone('America/Sao_Paulo')
-def obter_agora_br():
-    return datetime.now(fuso_br)
-
 st.title("💰 Gestão Financeira com Histórico Real")
 
-# --- CONEXÃO SEGURO VIA GSHEETS CONNECTION ---
+# --- CONEXÃO COM O BANCO DE DADOS (GOOGLE SHEETS) ---
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-    # Mudamos para ler diretamente usando a API autenticada pela Service Account
-    df_gastos_reais = conn.read(worksheet="Gastos", ttl=0)
-    
-    # Limpeza de colunas fantasmas e vazias
-    if df_gastos_reais is not None and not df_gastos_reais.empty:
-        df_gastos_reais = df_gastos_reais.loc[:, ~df_gastos_reais.columns.str.contains('^Unnamed')]
-        df_gastos_reais = df_gastos_reais.dropna(how="all")
-    
-    # Garante cabeçalhos corretos do financeiro
-    for col in ["Data", "Descricao", "Categoria", "Valor"]:
-        if col not in df_gastos_reais.columns:
-            df_gastos_reais[col] = None
+    # Lê os dados existentes na planilha (aba Gastos)
+    df_gastos_reais = conn.read(worksheet="Gastos", ttl="0m")
 except Exception as e:
-    st.error(f"Erro na conexão com a planilha: {e}")
+    st.error("Erro ao conectar com o Google Sheets. Verifique as Secrets no Streamlit Cloud.")
     df_gastos_reais = pd.DataFrame(columns=["Data", "Descricao", "Categoria", "Valor"])
 
-# --- SEÇÃO 1: RECEBIMENTOS DO MÊS ---
-st.subheader("📥 Recebimentos do Mês")
+# --- SEÇÃO 1: ENTRADAS DE RENDA FIXA (Mantida na memória da sessão) ---
+# Para simplificar o fluxo inicial, mantemos a renda base estática em tela
+st.subheader("📥 Recebimentos Base")
 col1, col2 = st.columns(2)
 with col1:
     adiantamento = st.number_input("Adiantamento (Dia 20) - R$", min_value=0.0, value=2082.22, format="%.2f")
@@ -70,106 +42,21 @@ with col2:
     salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", min_value=0.0, value=3152.25, format="%.2f")
 
 renda_total = adiantamento + salario_oficial
-porcentagem_guardar = st.slider("Porcentagem que deseja guardar este mês:", min_value=0, max_value=100, value=10, step=5)
-poupança_total = renda_total * (porcentagem_guardar / 100)
+porcentagem_guardar = st.slider("Porcentagem para guardar (Meta):", min_value=0, max_value=100, value=10, step=5)
+valor_guardar = renda_total * (porcentagem_guardar / 100)
 
 st.divider()
 
-# --- SEÇÃO 2: PROJEÇÕES DE GASTOS VARIÁVEIS E FIXOS ---
-st.subheader("🚗 Gastos Variáveis do Mês (Previsão)")
-col_v1, col_v2, col_v3 = st.columns(3)
-with col_v1:
-    proj_mercado = st.number_input("Supermercado / Alimentação - R$", min_value=0.0, value=750.00, format="%.2f")
-with col_v2:
-    proj_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=120.00, format="%.2f")
-with col_v3:
-    proj_carro = st.number_input("Combustível: Carro - R$", min_value=0.0, value=250.00, format="%.2f")
-
-variaveis_previstas = proj_mercado + proj_moto + proj_carro
-
-st.subheader("📌 Detalhamento das Contas Fixas (Previsão)")
-col_f1, col_f2 = st.columns(2)
-with col_f1:
-    f_financiamento = st.number_input("Financiamento do Ap - R$", min_value=0.0, value=1400.00, format="%.2f")
-    f_condominio = st.number_input("Condomínio - R$", min_value=0.0, value=400.00, format="%.2f")
-    f_iptu = st.number_input("IPTU - R$", min_value=0.0, value=100.00, format="%.2f")
-    f_seguro = st.number_input("Seguro Residencial - R$", min_value=0.0, value=30.00, format="%.2f")
-with col_f2:
-    f_claro = st.number_input("Claro (Internet/TV) - R$", min_value=0.0, value=150.00, format="%.2f")
-    f_luz = st.number_input("Conta de Luz - R$", min_value=0.0, value=80.00, format="%.2f")
-    f_celular = st.number_input("Conta de Celular - R$", min_value=0.0, value=40.00, format="%.2f")
-
-contas_fixas_total = f_financiamento + f_condominio + f_iptu + f_seguro + f_claro + f_luz + f_celular
-comprometido_total = contas_fixas_total + variaveis_previstas
-saldo_livre_lazer = renda_total - poupança_total - comprometido_total
-
-st.divider()
-
-# --- SEÇÃO 3: RESUMO FINANCEIRO E PAINEL METODOLÓGICO DOS DIAS ---
-st.subheader("📊 Resumo Financeiro Projetado")
-cq1, cq2, cq3, cq4 = st.columns(4)
-cq1.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
-cq2.markdown(f'<div class="metric-box"><div class="metric-title">Poupança Total</div><div class="metric-value" style="color: #2e7d32;">R$ {poupança_total:,.2f}</div></div>', unsafe_allow_html=True)
-cq3.markdown(f'<div class="metric-box"><div class="metric-title">Contas Fixas</div><div class="metric-value" style="color: #c62828;">R$ {contas_fixas_total:,.2f}</div></div>', unsafe_allow_html=True)
-cq4.markdown(f'<div class="metric-box"><div class="metric-title">Variáveis Previstas</div><div class="metric-value" style="color: #ef6c00;">R$ {variaveis_previstas:,.2f}</div></div>', unsafe_allow_html=True)
-
-st.info(f"🎉 **Saldo Livre Estimado para Lazer/Hobbies:** R$ {saldo_livre_lazer:,.2f}")
-
-st.subheader("📅 O que fazer quando o dinheiro cair?")
-
-proporcao_adiantamento = adiantamento / renda_total if renda_total > 0 else 0
-proporcao_salario = salario_oficial / renda_total if renda_total > 0 else 0
-
-poup_dia20 = adiantamento * (porcentagem_guardar / 100)
-contas_dia20 = comprometido_total * proporcao_adiantamento
-retencao_dia20_total = poup_dia20 + contas_dia20
-pct_reter_dia20 = (retencao_dia20_total / adiantamento) * 100 if adiantamento > 0 else 0
-pct_do_salario_total_dia20 = (retencao_dia20_total / renda_total) * 100 if renda_total > 0 else 0
-
-poup_dia05 = salario_oficial * (porcentagem_guardar / 100)
-contas_dia05 = comprometido_total * proporcao_salario
-retencao_dia05_total = poup_dia05 + contas_dia05
-pct_reter_dia05 = (retencao_dia05_total / salario_oficial) * 100 if salario_oficial > 0 else 0
-pct_do_salario_total_dia05 = (retencao_dia05_total / renda_total) * 100 if renda_total > 0 else 0
-
-col_card1, col_card2 = st.columns(2)
-
-with col_card1:
-    st.markdown(f"""
-    <div class="card-info-azul">
-        <div class="card-info-titulo">🏙️ Dia 20 (Adiantamento)</div>
-        <div class="card-info-sub">Você deve reter {pct_reter_dia20:.1f}% deste adiantamento.</div>
-        <div class="card-info-insight">💡 Isso equivale a {pct_do_salario_total_dia20:.1f}% do seu salário total.</div>
-        <div class="card-info-lista">🔹 <b>Poupar (Meta):</b> R$ {poup_dia20:,.2f}</div>
-        <div class="card-info-lista">🔹 <b>Reservar para Contas:</b> R$ {contas_dia20:,.2f}</div>
-        <div class="card-info-total"><b>Total a reter/guardar:</b> R$ {retencao_dia20_total:,.2f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_card2:
-    st.markdown(f"""
-    <div class="card-info-azul">
-        <div class="card-info-titulo">🩻 Dia 05 (Pagamento Oficial)</div>
-        <div class="card-info-sub">Você deve reter {pct_reter_dia05:.1f}% deste pagamento.</div>
-        <div class="card-info-insight">💡 Isso equivale a {pct_do_salario_total_dia05:.1f}% do seu salário total.</div>
-        <div class="card-info-lista">🔹 <b>Poupar (Meta):</b> R$ {poup_dia05:,.2f}</div>
-        <div class="card-info-lista">🔹 <b>Separar para Contas:</b> R$ {contas_dia05:,.2f}</div>
-        <div class="card-info-total"><b>Total a reter/guardar:</b> R$ {retencao_dia05_total:,.2f}</div>
-        <div style="font-size: 11px; color: #c62828; margin-top: 4px; font-weight: bold;">📌 Junte com a reserva do dia 20 para pagar os boletos.</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.divider()
-
-# --- SEÇÃO 4: LANÇAMENTO DE GASTO REAL NO GOOGLE SHEETS ---
-st.subheader("💸 Lançar Novo Gasto Efetuado (Real)")
+# --- SEÇÃO 2: NOVO LANÇAMENTO DE GASTO REAL ---
+st.subheader("💸 Lançar Novo Gasto")
+st.write("Registrou uma despesa? Coloque aqui para computar no gráfico:")
 
 with st.form(key="novo_gasto_form", clear_on_submit=True):
     col_data, col_desc = st.columns([1, 2])
     with col_data:
-        data_gasto = st.date_input("Data do Pagamento", obter_agora_br())
+        data_gasto = st.date_input("Data", datetime.now())
     with col_desc:
-        descricao_gasto = st.text_input("Descrição (Ex: Compras Mensais, Posto Shell)")
+        descricao_gasto = st.text_input("Descrição (Ex: Bar do Fulano, Mercado X)")
         
     col_cat, col_val = st.columns(2)
     with col_cat:
@@ -181,62 +68,84 @@ with st.form(key="novo_gasto_form", clear_on_submit=True):
 
     if botao_salvar:
         if descricao_gasto == "":
-            st.warning("Insira uma descrição para salvar.")
+            st.warning("Por favor, digite uma descrição para o gasto.")
         else:
-            with st.spinner("Gravando dados na planilha..."):
-                try:
-                    df_existente = conn.read(worksheet="Gastos", ttl=0)
-                    if df_existente is not None:
-                        df_existente = df_existente.loc[:, ~df_existente.columns.str.contains('^Unnamed')].dropna(how="all")
-                    
-                    novo_dado = pd.DataFrame([{
-                        "Data": data_gasto.strftime("%Y-%m-%d"),
-                        "Descricao": descricao_gasto,
-                        "Categoria": categoria_gasto,
-                        "Valor": float(valor_lancado)
-                    }])
-                    
-                    df_atualizado = pd.concat([df_existente, novo_dado], ignore_index=True)
-                    conn.update(worksheet="Gastos", data=df_atualizado)
-                    
-                    st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
-                    st.header("") # Pequeno espaçador visual antes do rerun
-                    st.rerun()
-                    
-                except Exception as e:
-                    if "200" in str(e):
-                        st.success(f"🎉 '{descricao_gasto}' guardado com sucesso!")
-                        st.rerun()
-                    else:
-                        st.error(f"Erro ao salvar: {e}")
+            # Preparar nova linha para a planilha
+            novo_dado = pd.DataFrame([{
+                "Data": data_gasto.strftime("%Y-%m-%d"),
+                "Descricao": descricao_gasto,
+                "Categoria": categoria_gasto,
+                "Valor": float(valor_lancado)
+            }])
+            
+            # Combinar dado antigo com o novo e salvar
+            df_atualizado = pd.concat([df_gastos_reais, novo_dado], ignore_index=True)
+            conn.update(worksheet="Gastos", data=df_atualizado)
+            st.success(f"🎉 '{descricao_gasto}' gravado com sucesso! Atualizando painel...")
+            # Força o recarregamento dos dados reais
+            st.rerun()
 
 st.divider()
 
-# --- SEÇÃO 5: EXTRAÇÃO E COMPARATIVO DO REAL ---
-st.subheader("📉 Extrato Histórico e Lançamentos do Mês")
+# --- SEÇÃO 3: ANÁLISE REAL DOS GASTOS ---
+st.subheader("📊 Gráficos e Distribuição dos Gastos Reais")
 
-if df_gastos_reais is not None and not df_gastos_reais.empty:
-    df_gastos_reais = df_gastos_reais.dropna(subset=["Valor"])
-
-if df_gastos_reais is not None and not df_gastos_reais.empty and len(df_gastos_reais) > 0:
+if not df_gastos_reais.empty and len(df_gastos_reais) > 0:
+    # Garante que a coluna de Valor está em formato numérico
     df_gastos_reais["Valor"] = pd.to_numeric(df_gastos_reais["Valor"])
+    
+    # Agrupa gastos por Categoria
     df_agrupado = df_gastos_reais.groupby("Categoria")["Valor"].sum().reset_index()
     total_gasto_real = df_agrupado["Valor"].sum()
     
+    # Calcula as porcentagens em relação ao gasto total acumulado
+    df_agrupado["Porcentagem do Total Gasto"] = (df_agrupado["Valor"] / total_gasto_real) * 100
+    df_agrupado["Porcentagem do Salário"] = (df_agrupado["Valor"] / renda_total) * 100 if renda_total > 0 else 0
+    
+    # Exibe Gráfico de Barras nativo do Streamlit
     st.bar_chart(data=df_agrupado, x="Categoria", y="Valor", color="#1e3d59")
     
+    # Tabela formatada para visualização rápida
+    st.markdown("#### 📋 Resumo por Categoria")
     df_exibicao = df_agrupado.copy()
     df_exibicao["Valor"] = df_exibicao["Valor"].map("R$ {:,.2f}".format)
+    df_exibicao["Porcentagem do Total Gasto"] = df_exibicao["Porcentagem do Total Gasto"].map("{:.1f}%".format)
+    df_exibicao["Porcentagem do Salário"] = df_exibicao["Porcentagem do Salário"].map("{:.1f}%".format)
+    
     st.dataframe(df_exibicao, hide_index=True, use_container_width=True)
     
-    saldo_real_caixa = renda_total - poupança_total - total_gasto_real
-    if saldo_real_caixa >= 0:
-        st.success(f"### 💳 Saldo Atual em Conta (Real): **R$ {saldo_real_caixa:,.2f}**")
-    else:
-        st.error(f"### ⚠️ Caixa estourado em: **R$ {abs(saldo_real_caixa):,.2f}**")
-        
-    df_extrato = df_gastos_reais.sort_values(by="Data", ascending=False).copy()
-    df_extrato["Valor"] = df_extrato["Valor"].map("R$ {:,.2f}".format)
-    st.dataframe(df_extrato, hide_index=True, use_container_width=True)
+    # --- CALCULO DO SALDO LIVRE DINÂMICO ---
+    saldo_livre_real = renda_total - valor_guardar - total_gasto_real
 else:
-    st.info("💡 Nenhum gasto real computado ainda na planilha.")
+    total_gasto_real = 0.0
+    saldo_livre_real = renda_total - valor_guardar
+    st.info("💡 Nenhuma despesa real foi lançada ainda. Use o formulário acima para começar.")
+
+st.divider()
+
+# --- SEÇÃO 4: PAINEL DE FECHAMENTO ---
+st.subheader("🏁 Balanço de Sobra Atual")
+
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Renda Total</div><div class="metric-value">R$ {renda_total:,.2f}</div></div>', unsafe_allow_html=True)
+with c2:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Guardado (Meta)</div><div class="metric-value" style="color: #2e7d32;">R$ {valor_guardar:,.2f}</div></div>', unsafe_allow_html=True)
+with c3:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">Total Gasto Real</div><div class="metric-value" style="color: #c62828;">R$ {total_gasto_real:,.2f}</div></div>', unsafe_allow_html=True)
+
+st.markdown("")
+
+if renda_total > 0:
+    if saldo_livre_real >= 0:
+        st.success(f"### 🎉 Saldo Disponível na Conta: **R$ {saldo_livre_real:,.2f}**")
+        st.caption("Este é o valor que teoricamente ainda sobrou na sua conta corrente após os gastos reais computados e a meta de poupança separada.")
+    else:
+        st.error(f"### ⚠️ Atenção! Você gastou mais do que devia em: **R$ {abs(saldo_livre_real):,.2f}**")
+
+    # --- LISTA COMPLETA DE EXTRATO ---
+    if not df_gastos_reais.empty:
+        st.markdown("#### 📜 Extrato Detalhado do Mês")
+        df_extrato = df_gastos_reais.sort_values(by="Data", ascending=False).copy()
+        df_extrato["Valor"] = df_extrato["Valor"].map("R$ {:,.2f}".format)
+        st.dataframe(df_extrato, hide_index=True, use_container_width=True)
