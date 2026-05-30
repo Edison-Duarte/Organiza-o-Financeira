@@ -2,10 +2,28 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
+# Configuração da página
 st.set_page_config(page_title="Gestão Financeira Mensal", page_icon="💰", layout="centered")
 
 ARQUIVO_DADOS = "dados_mes.json"
+
+# --- FUNÇÃO: SALVAR NO GOOGLE SHEETS ---
+def salvar_no_sheets(dados_extra):
+    # O dict abaixo deve corresponder à estrutura do seu st.secrets
+    # Exemplo: st.secrets["gcp_service_account"]
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    
+    # IMPORTANTE: Certifique-se de configurar os secrets no Streamlit Cloud
+    creds_dict = dict(st.secrets["gcp_service_account"]) 
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    
+    spreadsheet = client.open_by_key("1X74m1kSZIx_eLdGTb8ZOf4RNK-PrFWFlmdx4gtgig9Q")
+    sheet = spreadsheet.worksheet("Gastos")
+    sheet.append_row([pd.Timestamp.now().strftime("%d/%m/%Y"), dados_extra['desc'], "Extra", dados_extra['valor']])
 
 # --- CARREGAMENTO INICIAL ---
 def carregar_dados():
@@ -24,8 +42,6 @@ def carregar_dados():
 
 if "dados" not in st.session_state:
     st.session_state.dados = carregar_dados()
-
-# Inicializa lista de gastos extras separadamente para evitar KeyError
 if "gastos_avulsos" not in st.session_state:
     st.session_state.gastos_avulsos = []
 
@@ -37,7 +53,7 @@ with col1: adiantamento = st.number_input("Adiantamento (Dia 20) - R$", value=st
 with col2: salario_oficial = st.number_input("Pagamento Oficial (Dia 05) - R$", value=st.session_state.dados.get("salario_oficial", 0.0), step=100.0)
 porcentagem_guardar = st.slider("Porcentagem a guardar:", 0, 100, int(st.session_state.dados.get("porcentagem_guardar", 10)))
 
-# --- GASTOS ---
+# --- GASTOS FIXOS/VARIÁVEIS ---
 compras_mes = st.number_input("Supermercado - R$", value=st.session_state.dados.get("compras_mes", 0.0), step=50.0)
 combustivel_carro = st.number_input("Combustível Carro - R$", value=st.session_state.dados.get("combustivel_carro", 0.0), step=50.0)
 combustivel_moto = st.number_input("Combustível Moto - R$", value=st.session_state.dados.get("combustivel_moto", 0.0), step=20.0)
@@ -49,20 +65,26 @@ claro_tv_internet = st.number_input("Claro - R$", value=st.session_state.dados.g
 luz = st.number_input("Luz - R$", value=st.session_state.dados.get("luz", 0.0), step=10.0)
 celular = st.number_input("Celular - R$", value=st.session_state.dados.get("celular", 0.0), step=5.0)
 
-# --- NOVA SEÇÃO: GASTOS AVULSOS ---
+# --- GASTOS AVULSOS ---
 st.divider()
 st.subheader("📝 Adicionar Gastos Avulsos")
 c1, c2, c3 = st.columns([2, 1, 1])
-with c1: desc_extra = st.text_input("Descrição do gasto")
+with c1: desc_extra = st.text_input("Descrição")
 with c2: valor_extra = st.number_input("Valor (R$)", min_value=0.0, step=1.0)
 with c3:
     st.write("###")
     if st.button("Adicionar"):
         if desc_extra and valor_extra > 0:
-            st.session_state.gastos_avulsos.append({"desc": desc_extra, "valor": valor_extra})
+            novo_gasto = {"desc": desc_extra, "valor": valor_extra}
+            st.session_state.gastos_avulsos.append(novo_gasto)
+            try:
+                salvar_no_sheets(novo_gasto)
+                st.success("Adicionado à planilha!")
+            except Exception as e:
+                st.error(f"Erro ao salvar na planilha: {e}")
             st.rerun()
 
-# --- CÁLCULOS ---
+# --- CÁLCULOS E PROJEÇÕES ---
 renda_total = adiantamento + salario_oficial
 total_extras = sum(item['valor'] for item in st.session_state.gastos_avulsos)
 contas_fixas_total = financiamento + condominio + iptu + seguro_residencial + claro_tv_internet + luz + celular
@@ -70,31 +92,18 @@ gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
 valor_guardar = renda_total * (porcentagem_guardar / 100)
 saldo_livre = renda_total - valor_guardar - contas_fixas_total - gastos_variaveis_total - total_extras
 
-# --- QUADROS DE PROJEÇÃO ---
+# --- QUADROS AZUIS ---
 if renda_total > 0:
     p_adiantamento = adiantamento / renda_total
     p_oficial = salario_oficial / renda_total
     st.subheader("📅 O que fazer quando o dinheiro cair?")
-    col_d20, col_d05 = st.columns(2)
-    with col_d20:
-        poupança_d20 = adiantamento * (porcentagem_guardar / 100)
-        fixas_d20 = contas_fixas_total * p_adiantamento
-        st.info(f"### 🏦 Dia 20\n* **Poupar:** R$ {poupança_d20:,.2f}\n* **Fixas:** R$ {fixas_d20:,.2f}")
-    with col_d05:
-        poupança_d05 = salario_oficial * (porcentagem_guardar / 100)
-        fixas_d05 = contas_fixas_total * p_oficial
-        st.info(f"### 🏢 Dia 05\n* **Poupar:** R$ {poupança_d05:,.2f}\n* **Fixas:** R$ {fixas_d05:,.2f}")
+    c_d20, c_d05 = st.columns(2)
+    with c_d20: st.info(f"### 🏦 Dia 20\n* Poupar: R$ {adiantamento*(porcentagem_guardar/100):,.2f}\n* Fixas: R$ {contas_fixas_total*p_adiantamento:,.2f}")
+    with c_d05: st.info(f"### 🏢 Dia 05\n* Poupar: R$ {salario_oficial*(porcentagem_guardar/100):,.2f}\n* Fixas: R$ {contas_fixas_total*p_oficial:,.2f}")
 
-st.divider()
 st.success(f"### Saldo Livre: R$ {saldo_livre:,.2f}")
 
-if st.session_state.gastos_avulsos:
-    st.table(pd.DataFrame(st.session_state.gastos_avulsos))
-    if st.button("Limpar gastos avulsos"):
-        st.session_state.gastos_avulsos = []
-        st.rerun()
-
-# --- BOTÃO SALVAR ---
+# --- SALVAR PADRÕES ---
 if st.button("Salvar Tudo como Padrão", type="primary"):
     novo_json = {
         "adiantamento": adiantamento, "salario_oficial": salario_oficial, "porcentagem_guardar": porcentagem_guardar,
