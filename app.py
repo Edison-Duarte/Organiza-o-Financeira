@@ -167,7 +167,7 @@ if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container
         "compras_mes": compras_mes,
         "combustivel_carro": combustivel_carro,
         "combustivel_moto": combustivel_moto,
-        "cartao_credito": cartao_credito, # <-- ADICIONADO
+        "cartao_credito": cartao_credito,
         "financiamento": financiamento,
         "condominio": condominio,
         "iptu": iptu,
@@ -177,4 +177,9 @@ if st.button("Salvar Valores Atuais como Padrão", type="primary", use_container
         "celular": celular
     }
     try:
-        with open(ARQUIVO_DADOS, "w", encoding="utf
+        with open(ARQUIVO_DADOS, "w", encoding="utf-8") as f:
+            json.dump(novos_dados, f, ensure_ascii=False, indent=4)
+        st.session_state.dados = novos_dados
+        st.success("🎉 Valores salvos com sucesso!")
+    except Exception as e:
+        st.error(f"Erro ao salvar os dados localmente: {e}")
