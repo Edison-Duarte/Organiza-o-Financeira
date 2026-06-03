@@ -90,6 +90,7 @@ with gv_col1:
 
 with gv_col2:
     combustivel_moto = st.number_input("Combustível: Moto - R$", min_value=0.0, value=st.session_state.dados["combustivel_moto"], step=20.0, format="%.2f")
+    cartao_credito = st.number_input("Cartão de Crédito - R$", min_value=0.0, value=st.session_state.dados["cartao_credito"], step=20.0, format="%.2f")
 
 gastos_variaveis_total = compras_mes + combustivel_carro + combustivel_moto
 
